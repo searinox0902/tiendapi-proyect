@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: tiendapi_postgres
+    environment:
+      POSTGRES_USER: tiendapi
+      POSTGRES_PASSWORD: tiendapi
+      POSTGRES_DB: tiendapi
+    ports:
+      - "5432:5432"
+    volumes:
+      - tiendapi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiendapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: tiendapi_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://tiendapi:tiendapi@postgres:5432/tiendapi
+      ENVIRONMENT: production
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,tauri://localhost"
+    ports:
+      - "8000:8000"
+
+volumes:
+  tiendapi_pgdata:

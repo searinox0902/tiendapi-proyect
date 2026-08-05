@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# Dependencias (se reinstalan con npm install / pip install -r)
+# ---------------------------------------------------------------------------
+node_modules/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---------------------------------------------------------------------------
+# Artefactos de build (se regeneran; nunca se versionan)
+# ---------------------------------------------------------------------------
+dist/
+dist-ssr/
+build/
+# Compilados de Rust/Tauri: pesan cientos de MB
+src-tauri/target/
+
+# ---------------------------------------------------------------------------
+# Secretos y configuración local
+# ---------------------------------------------------------------------------
+# Los valores reales nunca se suben. Sí se versionan las plantillas:
+# `backend/.env.example` y `frontend/.env.development` (documentados como
+# públicos en su propio encabezado).
+.env
+.env.local
+.env.*.local
+
+# Permisos de Claude Code propios de esta máquina (rutas con el usuario de
+# Windows). El compartido con el equipo sí se versiona: .claude/settings.json
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Restos locales que no forman parte del proyecto
+# ---------------------------------------------------------------------------
+# npm corrido por error desde la raíz: este package.json no tiene `name`,
+# `scripts` ni `workspaces`, y arrastra `dnd-kit-vue` + `@dnd-kit/abstract`,
+# justo los paquetes que D-56 sacó del frontend por romper el build.
+# La barra inicial ancla la regla a la raíz: frontend/package.json sí se versiona.
+/package.json
+/package-lock.json
+
+# Copia manual previa a la migración a shadcn. Superada por frontend/src/api/*.
+frontend_old_backup/
+
+# ---------------------------------------------------------------------------
+# Editores y sistema operativo
+# ---------------------------------------------------------------------------
+# De .vscode solo se versiona extensions.json (recomendaciones para el equipo).
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Logs y temporales
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.tmp_*

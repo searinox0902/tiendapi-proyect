@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import { watchDebounced } from "@vueuse/core"
-import { IconDotsVertical, IconPencil, IconTrash } from "@tabler/icons-vue"
+import { IconDotsVertical, IconPencil, IconPhoto, IconTrash, IconPlus } from "@tabler/icons-vue"
 import { toast } from "vue-sonner"
 
 import AppSidebar from "@/components/AppSidebar.vue"
@@ -37,6 +37,10 @@ import {
 } from "@/components/ui/table"
 import { useReferencesStore } from "@/stores/references"
 import type { IReference, IReferenceFilters } from "@/api/references/references.types"
+import { useRoute, useRouter } from "vue-router"
+const route = useRoute()
+const router = useRouter()
+
 
 /** `SelectItem` de reka-ui no acepta value vacío, así que la opción "todas" necesita un centinela. */
 const ALL_CATEGORIES = "__all__"
@@ -122,6 +126,11 @@ function deleteReference(reference: IReference) {
   console.log("eliminar", reference.sku)
 }
 
+function redirecToReferencesNew() : void {
+  
+  router.push({ name: "references-new" })
+}
+
 onMounted(async () => {
   try {
     await store.fetchCategories()
@@ -146,53 +155,69 @@ onMounted(async () => {
   >
     <AppSidebar variant="inset" />
     <SidebarInset>
-      <header class="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
-        <div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
-          <SidebarTrigger class="-ml-1" />
-          <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
-          <h1 class="text-base font-medium">
-            Referencias
-          </h1>
-        </div>
-      </header>
+      <div class="px-6 space-y-6 pb-6">
 
-      <div class="flex flex-1 flex-col gap-4 p-4 lg:p-6">
-        <!-- Filtros -->
-        <div class="flex flex-col gap-4 md:flex-row md:items-end">
-          <div class="grid w-full gap-2 md:max-w-56">
-            <Label for="filter-sku">SKU</Label>
-            <Input id="filter-sku" v-model="filters.sku" placeholder="FRE-0001" />
+        <header class="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
+          <div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+            <SidebarTrigger class="-ml-1" />
+            <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
+            <h1 class="text-base font-medium">
+              Referencias
+            </h1>
           </div>
+        </header>
 
-          <div class="grid w-full gap-2 md:max-w-72">
-            <Label for="filter-title">Nombre de referencia</Label>
-            <Input id="filter-title" v-model="filters.title" placeholder="Pastillas, bujía…" />
-          </div>
+        <div class="flex flex-1 flex-col gap-4">
+          <!-- Filters -->
+          <div class="flex items-center gap-4"> 
+              <div class="flex flex-col flex-1 gap-4 md:flex-row md:items-end">
+                <div class="grid w-full gap-2 md:max-w-56">
+                  <Label for="filter-sku">SKU</Label>
+                  <Input id="filter-sku" v-model="filters.sku" placeholder="FRE-0001" />
+                </div>
 
-          <div class="grid w-full gap-2 md:max-w-56">
-            <Label for="filter-category">Categoría</Label>
-            <Select v-model="filters.category">
-              <SelectTrigger id="filter-category" class="w-full">
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="ALL_CATEGORIES">
-                  Todas
-                </SelectItem>
-                <SelectItem
-                  v-for="category in store.categories"
-                  :key="category.id"
-                  :value="category.id"
-                >
-                  {{ category.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <div class="grid w-full gap-2 md:max-w-72">
+                  <Label for="filter-title">Nombre de referencia</Label>
+                  <Input id="filter-title" v-model="filters.title" placeholder="Pastillas, bujía…" />
+                </div>
 
-          <Button v-if="hasFilters" variant="ghost" class="md:mb-0" @click="clearFilters">
-            Limpiar
-          </Button>
+                <div class="grid w-full gap-2 md:max-w-56">
+                  <Label for="filter-category">Categoría</Label>
+                  <Select v-model="filters.category">
+                    <SelectTrigger id="filter-category" class="w-full">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="ALL_CATEGORIES">
+                        Todas
+                      </SelectItem>
+                      <SelectItem
+                        v-for="category in store.categories"
+                        :key="category.id"
+                        :value="category.id"
+                      >
+                        {{ category.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button v-if="hasFilters" variant="ghost" class="md:mb-0" @click="clearFilters">
+                  Limpiar
+                </Button>
+              </div>
+              
+              
+                  <Button
+                    class=" flex-no-wrap justify-start gap-2 text-white hover:text-white"
+                    @click="redirecToReferencesNew()"
+                  >
+                    <IconPlus class="size-4" />
+                    Crear Referencia
+                  </Button>
+              </div>
+
+            
         </div>
 
         <!-- Tabla -->
@@ -200,6 +225,9 @@ onMounted(async () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead class="w-16">
+                  Foto
+                </TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Nombre de referencia</TableHead>
                 <TableHead>Marca</TableHead>
@@ -214,7 +242,7 @@ onMounted(async () => {
             </TableHeader>
             <TableBody>
               <TableRow v-if="store.isLoading">
-                <TableCell colspan="6" class="h-24 text-center">
+                <TableCell colspan="7" class="h-24 text-center">
                   <Spinner class="mx-auto" />
                 </TableCell>
               </TableRow>
@@ -223,6 +251,20 @@ onMounted(async () => {
                 v-for="reference in store.isLoading ? [] : store.references"
                 :key="reference.id"
               >
+                <TableCell>
+                  <img
+                    v-if="reference.image_url"
+                    :src="reference.image_url"
+                    :alt="reference.title"
+                    class="size-10 rounded-md border border-border object-cover"
+                  >
+                  <div
+                    v-else
+                    class="flex size-10 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground"
+                  >
+                    <IconPhoto class="size-4" />
+                  </div>
+                </TableCell>
                 <TableCell class="font-medium">
                   {{ reference.sku }}
                 </TableCell>
@@ -266,7 +308,7 @@ onMounted(async () => {
 
               <!-- Falló la carga: no es lo mismo que "no hay resultados". -->
               <TableRow v-if="!store.isLoading && store.hasError">
-                <TableCell colspan="6" class="h-24 text-center">
+                <TableCell colspan="7" class="h-24 text-center">
                   <p class="text-destructive">
                     No se pudieron cargar las referencias.
                   </p>
@@ -279,7 +321,7 @@ onMounted(async () => {
               <TableRow
                 v-else-if="!store.isLoading && store.references.length === 0"
               >
-                <TableCell colspan="6" class="h-24 text-center text-muted-foreground">
+                <TableCell colspan="7" class="h-24 text-center text-muted-foreground">
                   {{
                     hasFilters
                       ? "No hay referencias que coincidan con los filtros."

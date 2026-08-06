@@ -20,6 +20,8 @@ export interface IReference {
   image_url: string | null;
   base_price: string;
   iva_percentage: string;
+  /** Costo de adquisición (lado compra), independiente de base_price/sale_price (lado venta). `null` si aún no se capturó. */
+  precio_proveedor: string | null;
   created_at: string;
   updated_at: string;
   version: number;

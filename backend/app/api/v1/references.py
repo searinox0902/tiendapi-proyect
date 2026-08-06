@@ -1,7 +1,9 @@
+import re
 import uuid
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,18 @@ from app.schemas.reference import ReferenceCreate, ReferenceRead, ReferenceSumma
 
 router = APIRouter(prefix="/references", tags=["references"])
 crud = CRUDBase(Reference)
+
+# Medida temporal de DESARROLLO (D-40/D-58): en producción el archivo vive en
+# `appDataDir` del usuario (Tauri), nunca en el backend central. Esto solo
+# existe para poder probar el flujo "nombre de archivo = SKU" sin el wrapper
+# de escritorio, que todavía no está levantado en este repo.
+STATIC_IMAGES_DIR = Path(__file__).resolve().parents[3] / "static" / "images"
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _sanitize_sku(sku: str) -> str:
+    """Ídem la sanitización que hará el cliente de escritorio (D-58): fuera cualquier carácter inválido en filesystem."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", sku)
 
 
 def _contains(value: str) -> str:
@@ -147,6 +161,34 @@ def create_reference(
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
     return crud.create(db, tenant_id, payload.model_dump())
+
+
+@router.post("/images/{sku}")
+async def upload_reference_image(
+    sku: str,
+    file: UploadFile = File(...),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    """
+    Guarda la imagen de una Referencia nombrada por SKU (D-58) — medida temporal
+    de desarrollo mientras no exista el wrapper Tauri (D-40): el archivo se sirve
+    desde el propio backend en vez de `appDataDir`, solo para poder probar el
+    flujo end-to-end sin empaquetar la app de escritorio. Independiente de si la
+    Referencia ya existe como fila en la BBDD — se identifica solo por SKU.
+    """
+    extension = Path(file.filename or "").suffix.lower() or ".jpg"
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Formato no soportado: {extension}",
+        )
+
+    tenant_dir = STATIC_IMAGES_DIR / str(tenant_id)
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    destination = tenant_dir / f"{_sanitize_sku(sku)}{extension}"
+    destination.write_bytes(await file.read())
+
+    return {"url": f"/static/images/{tenant_id}/{destination.name}"}
 
 
 @router.get("/{reference_id}", response_model=ReferenceRead)

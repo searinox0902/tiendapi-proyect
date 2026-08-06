@@ -16,6 +16,9 @@ class ReferenceBase(BaseModel):
     image_url: Optional[str] = None
     base_price: Decimal
     iva_percentage: Decimal = Decimal("0")
+    # Costo de adquisición (lado compra), independiente de base_price/sale_price
+    # (lado venta) — ver D-47. Opcional: el catálogo existente no lo tiene todavía.
+    precio_proveedor: Optional[Decimal] = None
 
 
 class ReferenceCreate(ReferenceBase):

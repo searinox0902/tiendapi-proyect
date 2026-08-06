@@ -40,3 +40,7 @@ class Reference(Base, UUIDPKMixin, TenantScopedMixin, TimestampMixin, SyncMixin)
     base_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     # antes `iva` en docs/03 (ambiguo % vs. monto — ver D-19)
     iva_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    # Costo de adquisición (lado COMPRA) — eje independiente de base_price/sale_price
+    # (lado VENTA), sin fórmula que lo derive (D-47). Nullable: el catálogo existente
+    # no lo tiene todavía; se captura 100% manual desde el CRUD (D-52).
+    precio_proveedor: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)

@@ -1,9 +1,11 @@
 import logging
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -14,6 +16,14 @@ configure_logging()
 logger = logging.getLogger("tiendapi")
 
 app = FastAPI(title=settings.project_name)
+
+# Medida temporal de DESARROLLO (mientras no exista el wrapper Tauri, D-40/D-58):
+# sirve las imágenes de Referencia guardadas por SKU vía el endpoint de subida.
+# En producción esto no existe — las imágenes viven en `appDataDir` del usuario,
+# nunca en el backend central.
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 app.add_middleware(
     CORSMiddleware,

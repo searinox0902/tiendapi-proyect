@@ -29,6 +29,10 @@ services:
       CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,tauri://localhost"
     ports:
       - "8000:8000"
+    volumes:
+      # Medida temporal de desarrollo (D-40/D-58): imágenes guardadas por SKU,
+      # persistentes en el host para que sobrevivan a un rebuild del contenedor.
+      - ./static:/app/static
 
 volumes:
   tiendapi_pgdata:

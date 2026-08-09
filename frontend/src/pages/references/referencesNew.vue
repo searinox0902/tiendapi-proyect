@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { useRouter } from "vue-router"
+import axios from "axios"
 import { toTypedSchema } from "@vee-validate/zod"
 import { useForm } from "vee-validate"
 import { toast } from "vue-sonner"
@@ -11,6 +13,7 @@ import NumericMaskInput from "@/components/NumericMaskInput.vue"
 import { useAnimatedCurrency } from "@/composables/useAnimatedCurrency"
 import { toDecimal } from "@/lib/money"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import {
@@ -23,16 +26,29 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
-import { referenceFormSchema } from "@/api/references/references.schema"
+import { buildReferenceFormSchema } from "@/api/references/references.schema"
 import { referencesApi } from "@/api/references/references.api"
 import { useReferencesStore } from "@/stores/references"
 
+const props = defineProps<{
+  /** Presente solo en la ruta `/referencias/editar/:sku` (D: reutilizar este mismo componente para crear y editar). */
+  sku?: string
+}>()
+const isEditMode = computed(() => !!props.sku)
+
+const router = useRouter()
 const store = useReferencesStore()
 
-const { values } = useForm({
-  validationSchema: toTypedSchema(referenceFormSchema),
+/** `id` real de la Referencia en edición (la ruta la identifica por SKU, pero `PUT /references/{id}` necesita el UUID). */
+const editingId = ref<string | undefined>(undefined)
+/** Imagen ya persistida de la Referencia en edición (precarga el preview sin pasar por `croppedImage`). */
+const existingImageUrl = ref<string | null>(null)
+
+const { values, handleSubmit, resetForm, isSubmitting } = useForm({
+  validationSchema: computed(() => toTypedSchema(buildReferenceFormSchema(props.sku))),
   initialValues: {
     sku: "",
+    provider_id: undefined,
     brand: undefined,
     category_id: undefined,
     title: "",
@@ -51,46 +67,147 @@ const brandOptions = computed(() => {
   return [...unique].sort((a, b) => a.localeCompare(b))
 })
 
-onMounted(async () => {
-  try {
-    await store.fetchCategories()
-  } catch {
+onMounted(() => {
+  // Las 4 cargas son independientes entre sí: van en paralelo (no encadenadas
+  // con await) para que la referencia a editar no quede esperando detrás del
+  // catálogo de categorías/proveedores/marcas.
+  store.fetchCategories().catch(() => {
     toast.error("No se pudieron cargar las categorías", { position: "bottom-center" })
-  }
-  try {
-    await store.fetchReferences({ limit: 200 })
-  } catch {
+  })
+  store.fetchProviders().catch(() => {
+    toast.error("No se pudieron cargar los proveedores", { position: "bottom-center" })
+  })
+  store.fetchReferences({ limit: 200 }).catch(() => {
     toast.error("No se pudieron cargar las marcas", { position: "bottom-center" })
+  })
+
+  if (isEditMode.value && props.sku) {
+    referencesApi.lookupReference(props.sku)
+      .then(({ data }) => {
+        if (data === null) {
+          toast.error("No existe una referencia con ese SKU", { position: "bottom-center" })
+          router.push({ name: "references" })
+          return
+        }
+        editingId.value = data.id
+        existingImageUrl.value = data.image_url
+        resetForm({
+          values: {
+            sku: data.sku,
+            provider_id: data.provider_id,
+            brand: data.brand ?? undefined,
+            category_id: data.category_id ?? undefined,
+            title: data.title,
+            description: data.description ?? undefined,
+            precio_proveedor: data.precio_proveedor !== null ? Number(data.precio_proveedor) : undefined,
+            base_price: Number(data.base_price),
+            iva_percentage: Number(data.iva_percentage),
+          },
+        })
+      })
+      .catch(() => {
+        toast.error("No se pudo cargar la referencia a editar", { position: "bottom-center" })
+      })
   }
 })
 
-/** La imagen se maneja aparte del schema (no bloquea el guardado de la Referencia). */
+/**
+ * La imagen se recorta y se guarda en memoria (`croppedImage`), pero NO se sube
+ * todavía: solo se persiste una vez la Referencia se crea con éxito (abajo, en
+ * `onSubmit`), para no dejar imágenes huérfanas en el servidor de desarrollo si
+ * la creación falla o el usuario nunca llega a enviar el formulario.
+ */
 const croppedImage = ref<Blob | null>(null)
 const imagePreviewUrl = ref<string | null>(null)
 
-watch(croppedImage, async (blob) => {
+watch(croppedImage, (blob) => {
   if (imagePreviewUrl.value) {
     URL.revokeObjectURL(imagePreviewUrl.value)
   }
   imagePreviewUrl.value = blob ? URL.createObjectURL(blob) : null
-
-  if (!blob) {
-    return
-  }
-  const sku = values.sku?.trim()
-  if (!sku) {
-    toast.error("Ingresa el SKU antes de subir la imagen", { position: "bottom-center" })
-    return
-  }
-  // Medida temporal de desarrollo (D-40/D-58): sube al backend central mientras
-  // no exista el wrapper Tauri para guardar en appDataDir del usuario.
-  try {
-    await referencesApi.uploadImage(sku, blob)
-    toast.success(`Imagen guardada como "${sku}" (modo desarrollo)`, { position: "bottom-center" })
-  } catch {
-    toast.error("No se pudo guardar la imagen en el servidor de desarrollo", { position: "bottom-center" })
-  }
 })
+
+/**
+ * Sube la imagen recién recortada usando el SKU YA confirmado por el backend.
+ * Medida temporal de desarrollo (D-40/D-58): en producción esto lo maneja el
+ * wrapper Tauri contra `appDataDir`, no el backend central. Como estamos en
+ * local-first contra una BBDD/servicio local (sin red de por medio), no hay
+ * necesidad real de mandar todo en una sola petición atómica: crear la
+ * Referencia y luego subir su imagen en dos pasos secuenciales es igual de
+ * confiable aquí, y evita tener que resolver el caso "la imagen se subió pero
+ * la Referencia falló" (o viceversa) que sí importaría contra un servidor remoto.
+ */
+async function uploadPendingImage(sku: string): Promise<string | null> {
+  if (!croppedImage.value) {
+    return null
+  }
+  try {
+    const { data } = await referencesApi.uploadImage(sku, croppedImage.value)
+    return `${import.meta.env.VITE_API_URL}${data.url}`
+  } catch {
+    toast.error("La referencia se creó, pero no se pudo guardar la imagen", { position: "bottom-center" })
+    return null
+  }
+}
+
+const onSubmit = handleSubmit(
+  async (formValues) => {
+    try {
+      const payload = {
+        provider_id: formValues.provider_id,
+        category_id: formValues.category_id ?? null,
+        sku: formValues.sku,
+        title: formValues.title,
+        brand: formValues.brand ?? null,
+        description: formValues.description ?? null,
+        image_url: existingImageUrl.value,
+        base_price: formValues.base_price,
+        iva_percentage: formValues.iva_percentage,
+        precio_proveedor: formValues.precio_proveedor,
+      }
+
+      let referenceId: string
+      if (isEditMode.value && editingId.value) {
+        const { data } = await referencesApi.updateReference(editingId.value, payload)
+        referenceId = data.id
+      } else {
+        // La imagen se sube DESPUÉS de crear la referencia, no antes ni junto: si
+        // la creación falla, nunca se sube nada (ver comentario de `uploadPendingImage`).
+        const { data } = await referencesApi.createReference(payload)
+        referenceId = data.id
+      }
+
+      // `uploadImage` solo guarda el archivo (D-58); la URL resultante hay que
+      // persistirla aparte en `image_url` con un segundo PUT, o la Referencia
+      // se queda sin imagen aunque el archivo sí se haya subido.
+      const uploadedImageUrl = await uploadPendingImage(formValues.sku)
+      if (uploadedImageUrl) {
+        await referencesApi.updateReference(referenceId, { ...payload, image_url: uploadedImageUrl })
+      }
+
+      toast.success(
+        isEditMode.value ? "Referencia actualizada correctamente" : "Referencia creada correctamente",
+        { position: "bottom-center", duration: 6000 },
+      )
+
+      if (isEditMode.value) {
+        router.push({ name: "references" })
+      } else {
+        resetForm()
+        croppedImage.value = null
+      }
+    } catch (error) {
+      const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined
+      const fallback = isEditMode.value ? "No se pudo actualizar la referencia" : "No se pudo crear la referencia"
+      toast.error(typeof detail === "string" ? detail : fallback, {
+        position: "bottom-center",
+      })
+    }
+  },
+  () => {
+    toast.error("Revisa los campos obligatorios antes de continuar", { position: "bottom-center" })
+  },
+)
 
 onBeforeUnmount(() => {
   if (imagePreviewUrl.value) {
@@ -126,7 +243,7 @@ const salePriceDisplay = useAnimatedCurrency(salePriceDecimal)
           <SidebarTrigger class="-ml-1" />
           <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
           <h1 class="text-base font-medium">
-            Registrar referencia
+            {{ isEditMode ? "Editar referencia" : "Registrar referencia" }}
           </h1>
         </div>
       </header>
@@ -134,12 +251,12 @@ const salePriceDisplay = useAnimatedCurrency(salePriceDecimal)
       <div class="flex w-full flex-1 gap-4 p-4 lg:p-6">
         <!-- Formulario -->
         <div class="min-w-0 flex-1 rounded-lg border border-border p-4 lg:p-6">
-          <form class="grid grid-cols-1 gap-4 md:grid-cols-2 items-start" @submit.prevent>
+          <form class="grid grid-cols-1 gap-4 md:grid-cols-2 items-start" @submit.prevent="onSubmit">
             <FormField v-slot="{ componentField }" name="sku">
               <FormItem>
                 <FormLabel>SKU</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ingrese SKU" v-bind="componentField" />
+                  <Input placeholder="Ingrese SKU" :disabled="isEditMode" v-bind="componentField" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -187,9 +304,28 @@ const salePriceDisplay = useAnimatedCurrency(salePriceDecimal)
               </FormItem>
             </FormField>
 
-            <div class="grid gap-2">
-              &nbsp;
-            </div>
+            <FormField v-slot="{ componentField }" name="provider_id">
+              <FormItem>
+                <FormLabel>Proveedor</FormLabel>
+                <Select v-bind="componentField">
+                  <FormControl>
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem
+                      v-for="provider in store.providers"
+                      :key="provider.id"
+                      :value="provider.id"
+                    >
+                      {{ provider.title }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            </FormField>
 
             <FormField v-slot="{ componentField }" name="title">
               <FormItem class="md:col-span-2">
@@ -256,7 +392,15 @@ const salePriceDisplay = useAnimatedCurrency(salePriceDecimal)
 
             <div class="grid min-w-0 gap-2 md:col-span-2 mt-4">
               <label class="text-sm font-medium leading-none">Imagen Producto</label>
-              <ImageDropCropper v-model="croppedImage" />
+              <ImageDropCropper v-model="croppedImage" :initial-preview-url="existingImageUrl" />
+            </div>
+
+            <div class="flex justify-end md:col-span-2">
+              <Button type="submit" :disabled="isSubmitting">
+                {{ isSubmitting
+                  ? (isEditMode ? "Guardando..." : "Creando...")
+                  : (isEditMode ? "Guardar cambios" : "Crear referencia") }}
+              </Button>
             </div>
           </form>
         </div>
@@ -268,8 +412,8 @@ const salePriceDisplay = useAnimatedCurrency(salePriceDecimal)
           </p>
 
           <div class="h-44 w-44 bg-gray-100">
-            <figure v-if="imagePreviewUrl">
-              <img :src="imagePreviewUrl" alt="" class="h-full w-full object-cover">
+            <figure v-if="imagePreviewUrl || existingImageUrl">
+              <img :src="imagePreviewUrl ?? existingImageUrl ?? undefined" alt="" class="h-full w-full object-cover">
             </figure>
           </div>
 

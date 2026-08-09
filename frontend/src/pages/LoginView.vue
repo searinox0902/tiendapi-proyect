@@ -75,6 +75,7 @@
     FormLabel,
     FormMessage,
   } from "@/components/ui/form";
+  import { isAxiosError } from "axios";
   import { loginSchema } from "@/api/auth/auth.schema";
   import { useAuthStore } from "@/stores/auth"
   import { Spinner } from '@/components/ui/spinner'
@@ -101,6 +102,33 @@
     resetForm();
   }
 
+  /**
+   * 401 es la única condición que se muestra como "usuario o contraseña
+   * incorrectos" — es la única a la que el backend le da ese significado
+   * (`app/api/v1/auth.py::login`). Cualquier otra causa (servidor caído,
+   * 403 usuario inactivo, 5xx, error de red) mostraba el mismo mensaje
+   * genérico y ocultaba lo que de verdad pasó; acá se arma un mensaje con
+   * el detalle técnico que el backend/axios ya trae, sin inventar texto.
+   */
+  function describeLoginError(error: unknown): string {
+    if (isAxiosError(error)) {
+      if (!error.response) {
+        return `No se pudo conectar con el servidor (${error.code ?? error.message})`;
+      }
+      const { status, data } = error.response;
+      const detail = data?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join("; ")
+          : undefined;
+      return message
+        ? `Error al iniciar sesión (${status}): ${message}`
+        : `Error al iniciar sesión (${status})`;
+    }
+    return `Error inesperado al iniciar sesión: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
 
   const submit = handleSubmit(async (values) => {
     const { saveSession, ...credentials } = values;
@@ -117,11 +145,17 @@
         localStorage.removeItem(REMEMBERED_EMAIL_KEY);
       }
       router.push({ name: "dashboard" });
-    }catch{
-      toast.error("Usuario o contraseña incorrectos", {
-          position: "bottom-center",
-      });
-      resetLogin();
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 401) {
+        toast.error("Usuario o contraseña incorrectos", {
+            position: "bottom-center",
+        });
+        resetLogin();
+      } else {
+        toast.error(describeLoginError(error), {
+            position: "bottom-center",
+        });
+      }
     }
   });
 

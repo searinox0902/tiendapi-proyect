@@ -4,14 +4,16 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_tenant_id
+from app.api.filters import contains as _contains
 from app.crud.base import CRUDBase
 from app.models.reference import Reference
 from app.schemas.common import Page
-from app.schemas.reference import ReferenceCreate, ReferenceRead, ReferenceSummary
+from app.schemas.reference import ReferenceCreate, ReferenceRead, ReferenceSummary, ReferenceUpdate
 
 router = APIRouter(prefix="/references", tags=["references"])
 crud = CRUDBase(Reference)
@@ -29,23 +31,13 @@ def _sanitize_sku(sku: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", sku)
 
 
-def _contains(value: str) -> str:
-    """
-    Construye el patrón LIKE de "contiene", escapando los comodines del texto.
-
-    Sin escapar, buscar `50%` o `PZ_1` haría que `%` y `_` actúen como comodines
-    de SQL y devolvieran filas que el usuario no pidió.
-    """
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 @router.get("/", response_model=Page[ReferenceRead])
 def list_references(
     skip: int = Query(0, ge=0, description="Registros a saltar"),
     limit: int = Query(50, ge=1, le=200, description="Máximo de registros por página"),
     sku: str | None = Query(None, description="Coincidencia parcial, ignora mayúsculas"),
     title: str | None = Query(None, description="Coincidencia parcial, ignora mayúsculas"),
+    search: str | None = Query(None, description="Coincidencia parcial en SKU **o** nombre"),
     category_id: uuid.UUID | None = Query(None, description="Categoría exacta"),
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
@@ -56,12 +48,26 @@ def list_references(
     Soporta la pantalla "CRUD Referencia" del MVP (docs/05-alcance-mvp-y-flujos.md,
     §2.1). Los filtros se combinan con AND y los de texto son parciales; `total`
     cuenta las filas que pasan el filtro, no las de la página devuelta.
+
+    `search` existe aparte de `sku`/`title` porque une los dos con **OR**: en la
+    caja registradora hay un solo campo de búsqueda y el cajero no sabe (ni
+    debería) si lo que tiene en la mano es un código o un nombre — y con un
+    escáner de barras es siempre un código. Combinar `sku` y `title` no sirve
+    para eso: se cruzan con AND y exigirían que el término esté en los dos.
     """
     conditions = [Reference.tenant_id == tenant_id]
     if sku:
         conditions.append(Reference.sku.ilike(_contains(sku), escape="\\"))
     if title:
         conditions.append(Reference.title.ilike(_contains(title), escape="\\"))
+    if search:
+        pattern = _contains(search)
+        conditions.append(
+            or_(
+                Reference.sku.ilike(pattern, escape="\\"),
+                Reference.title.ilike(pattern, escape="\\"),
+            )
+        )
     if category_id is not None:
         conditions.append(Reference.category_id == category_id)
 
@@ -201,3 +207,36 @@ def get_reference(
     if obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reference not found")
     return obj
+
+
+@router.put("/{reference_id}", response_model=ReferenceRead)
+def update_reference(
+    reference_id: uuid.UUID,
+    payload: ReferenceUpdate,
+    db: Session = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    obj = crud.update(db, tenant_id, reference_id, payload.model_dump())
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reference not found")
+    return obj
+
+
+@router.delete("/{reference_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reference(
+    reference_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+):
+    try:
+        deleted = crud.delete(db, tenant_id, reference_id)
+    except IntegrityError:
+        # `Item.reference_id` es FK restrictiva (sin cascade): si hay Ítems
+        # apuntando a esta Referencia, Postgres rechaza el DELETE.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No se puede eliminar: la referencia tiene ítems de inventario asociados",
+        )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reference not found")

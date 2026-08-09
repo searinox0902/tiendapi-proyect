@@ -40,13 +40,13 @@ const groups = [
     label: "Gestión logística",
     items: [
       { title: "Referencias", to: "references", icon: IconTags },
-      { title: "Productos", to: "blank", icon: IconPackage },
+      { title: "Productos", to: "items", icon: IconPackage },
     ],
   },
   {
     label: "Ventas",
     items: [
-      { title: "Caja registradora", to: "blank", icon: IconCashRegister },
+      { title: "Caja registradora", to: "pos", icon: IconCashRegister },
       { title: "Registro de ventas", to: "blank", icon: IconReceipt },
     ],
   },

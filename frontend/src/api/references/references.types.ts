@@ -27,10 +27,30 @@ export interface IReference {
   version: number;
 }
 
+/** Body que espera `POST /references/` (`ReferenceCreate`). */
+export interface IReferenceCreate {
+  provider_id: string;
+  category_id?: string | null;
+  sku: string;
+  title: string;
+  brand?: string | null;
+  description?: string | null;
+  image_url?: string | null;
+  base_price: number;
+  iva_percentage: number;
+  precio_proveedor?: number | null;
+}
+
 /** Query params que acepta `GET /references/`. */
 export interface IReferenceFilters {
   sku?: string;
   title?: string;
+  /**
+   * SKU **o** nombre en un solo término (OR en el backend) — el campo único de
+   * búsqueda de la caja registradora. `sku` y `title` se cruzan con AND, así
+   * que no sirven para eso.
+   */
+  search?: string;
   category_id?: string;
   skip?: number;
   limit?: number;
@@ -62,6 +82,19 @@ export interface ICategory {
   id: string;
   tenant_id: string;
   name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  version: number;
+}
+
+/** Tal cual lo devuelve `GET /providers/` (`ProviderRead`). */
+export interface IProvider {
+  id: string;
+  tenant_id: string;
+  provider_code: string | null;
+  nit: string | null;
+  title: string;
   description: string | null;
   created_at: string;
   updated_at: string;

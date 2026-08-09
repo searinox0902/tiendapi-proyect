@@ -3,8 +3,19 @@ import { computed, onMounted, reactive, ref, watch } from "vue"
 import { watchDebounced } from "@vueuse/core"
 import { IconDotsVertical, IconPencil, IconPhoto, IconTrash, IconPlus } from "@tabler/icons-vue"
 import { toast } from "vue-sonner"
+import axios from "axios"
 
 import AppSidebar from "@/components/AppSidebar.vue"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -36,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useReferencesStore } from "@/stores/references"
+import { referencesApi } from "@/api/references/references.api"
 import type { IReference, IReferenceFilters } from "@/api/references/references.types"
 import { useRoute, useRouter } from "vue-router"
 const route = useRoute()
@@ -117,13 +129,60 @@ function formatDateTime(value: string | null) {
 }
 
 function editReference(reference: IReference) {
-  // TODO: abrir el formulario de edición.
-  console.log("editar", reference.sku)
+  router.push({ name: "references-edit", params: { sku: reference.sku } })
 }
 
+/**
+ * Referencia objetivo del borrado. Deliberadamente separada de `isDeleteDialogOpen`
+ * y NUNCA limpiada desde `@update:open`: `AlertDialogAction`/`AlertDialogCancel`
+ * heredan de `DialogClose` (reka-ui), que trae su propio `@click="onOpenChange(false)"`
+ * en el template — ese handler SIEMPRE corre antes que cualquier `@click` propio
+ * pasado desde afuera (llega por fallthrough, después del handler nativo del
+ * componente). Si `@update:open` limpiara `pendingDelete`, `confirmDelete` la
+ * leería ya en `null`. Por eso solo se limpia explícitamente al terminar
+ * `confirmDelete` — quedar "stale" mientras el diálogo está cerrado no importa,
+ * `deleteReference` la sobreescribe en la siguiente apertura.
+ */
+const pendingDelete = ref<IReference | null>(null)
+const isDeleteDialogOpen = ref(false)
+const isDeleting = ref(false)
+
 function deleteReference(reference: IReference) {
-  // TODO: confirmar y eliminar.
-  console.log("eliminar", reference.sku)
+  pendingDelete.value = reference
+  isDeleteDialogOpen.value = true
+}
+
+function cancelDelete() {
+  isDeleteDialogOpen.value = false
+}
+
+async function confirmDelete() {
+  const reference = pendingDelete.value
+  if (!reference) {
+    return
+  }
+  isDeleting.value = true
+  try {
+    await referencesApi.deleteReference(reference.id)
+    toast.success("Referencia eliminada correctamente", { position: "bottom-center" })
+    if (store.references.length === 1 && page.value > 1) {
+      page.value -= 1
+    } else {
+      await load()
+    }
+    store.fetchSummary().catch(() => {
+      toast.error("No se pudo actualizar el resumen", { position: "bottom-center" })
+    })
+  } catch (error) {
+    const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined
+    toast.error(typeof detail === "string" ? detail : "No se pudo eliminar la referencia", {
+      position: "bottom-center",
+    })
+  } finally {
+    isDeleting.value = false
+    isDeleteDialogOpen.value = false
+    pendingDelete.value = null
+  }
 }
 
 function redirecToReferencesNew() : void {
@@ -404,7 +463,7 @@ onMounted(async () => {
             </CardHeader>
             <CardContent>
               <dl class="divide-y divide-border">
-                <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
+                <div class="flex items-center justify-between gap-2 py-1 first:pt-0">
                   <dt class="text-sm text-muted-foreground">
                     Total referencias
                   </dt>
@@ -435,4 +494,27 @@ onMounted(async () => {
       </div>
     </SidebarInset>
   </SidebarProvider>
+
+  <AlertDialog :open="isDeleteDialogOpen" @update:open="(open) => { if (!open) cancelDelete() }">
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>¿Eliminar esta referencia?</AlertDialogTitle>
+        <AlertDialogDescription>
+          Se eliminará permanentemente "{{ pendingDelete?.title }}" ({{ pendingDelete?.sku }}). Esta acción no se puede deshacer.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel :disabled="isDeleting">
+          Cancelar
+        </AlertDialogCancel>
+        <AlertDialogAction
+          :disabled="isDeleting"
+          class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          @click="confirmDelete"
+        >
+          {{ isDeleting ? "Eliminando..." : "Eliminar" }}
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

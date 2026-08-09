@@ -25,6 +25,10 @@ class ReferenceCreate(ReferenceBase):
     pass
 
 
+class ReferenceUpdate(ReferenceBase):
+    pass
+
+
 class ReferenceRead(ReferenceBase):
     model_config = ConfigDict(from_attributes=True)
 

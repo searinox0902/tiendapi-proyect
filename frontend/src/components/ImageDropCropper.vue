@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue"
+import { onBeforeUnmount, ref, watch } from "vue"
 import { Cropper } from "vue-advanced-cropper"
 import "vue-advanced-cropper/dist/style.css"
 import { IconUpload } from "@tabler/icons-vue"
@@ -30,9 +30,12 @@ const props = withDefaults(defineProps<{
   aspectRatio?: number
   /** Lado (px) del cuadrado de salida ya recortado. */
   outputSize?: number
+  /** Imagen ya persistida (ej. al editar una Referencia existente) — se muestra en el dropzone mientras no se recorte una nueva. */
+  initialPreviewUrl?: string | null
 }>(), {
   aspectRatio: 1,
   outputSize: 500,
+  initialPreviewUrl: null,
 })
 
 const emit = defineEmits<{
@@ -100,6 +103,14 @@ async function confirmCrop() {
   cancelCrop()
 }
 
+/** Si quien lo usa limpia el `v-model` desde afuera (ej. tras crear la Referencia), refleja el reset acá también. */
+watch(() => props.modelValue, (value) => {
+  if (value === null && resultUrl.value) {
+    URL.revokeObjectURL(resultUrl.value)
+    resultUrl.value = null
+  }
+})
+
 onBeforeUnmount(() => {
   if (sourceImageUrl.value) {
     URL.revokeObjectURL(sourceImageUrl.value)
@@ -123,6 +134,10 @@ onBeforeUnmount(() => {
     >
       <template v-if="resultUrl">
         <img :src="resultUrl" alt="" class="size-24 rounded-md object-cover">
+        <span class="text-sm text-primary underline">Cambiar imagen</span>
+      </template>
+      <template v-else-if="initialPreviewUrl">
+        <img :src="initialPreviewUrl" alt="" class="size-24 rounded-md object-cover">
         <span class="text-sm text-primary underline">Cambiar imagen</span>
       </template>
       <template v-else>

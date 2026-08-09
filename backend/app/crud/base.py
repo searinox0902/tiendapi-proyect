@@ -36,3 +36,24 @@ class CRUDBase(Generic[ModelType]):
         db.commit()
         db.refresh(db_obj)
         return db_obj
+
+    def update(
+        self, db: Session, tenant_id: uuid.UUID, id: uuid.UUID, obj_in: dict
+    ) -> Optional[ModelType]:
+        db_obj = self.get(db, tenant_id, id)
+        if db_obj is None:
+            return None
+        for field, value in obj_in.items():
+            setattr(db_obj, field, value)
+        db_obj.version += 1  # control de versión (D-20) — resolución de conflictos de sync
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+    def delete(self, db: Session, tenant_id: uuid.UUID, id: uuid.UUID) -> bool:
+        db_obj = self.get(db, tenant_id, id)
+        if db_obj is None:
+            return False
+        db.delete(db_obj)
+        db.commit()
+        return True

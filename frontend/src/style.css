@@ -139,6 +139,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /*
+      Reserva siempre el canal de la barra de scroll. Sin esto, al filtrar a
+      pocos resultados la página deja de scrollear, la barra desaparece y el
+      viewport se ensancha ~15px de golpe: se corre todo a la derecha y el
+      texto de las cards se reacomoda. Es de los saltos más molestos porque
+      parece que la pantalla "temblara" al filtrar.
+    */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground font-sans;
   }

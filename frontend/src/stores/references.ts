@@ -2,6 +2,7 @@ import { ref } from "vue";
 import { defineStore } from "pinia";
 import type {
   ICategory,
+  IProvider,
   IReference,
   IReferenceFilters,
   IReferenceSummary,
@@ -12,6 +13,7 @@ export const useReferencesStore = defineStore("references", () => {
 
   const references = ref<IReference[]>([]);
   const categories = ref<ICategory[]>([]);
+  const providers = ref<IProvider[]>([]);
   /** Filas que pasan el filtro, ignorando la página. Sin esto no se sabe cuántas páginas dibujar. */
   const total = ref(0);
   const isLoading = ref(false);
@@ -60,6 +62,17 @@ export const useReferencesStore = defineStore("references", () => {
     }
   }
 
+  async function fetchProviders(): Promise<void> {
+    try {
+      const { data } = await referencesApi.getProviders();
+      providers.value = data;
+    } catch (error) {
+      console.error("Fetch providers failed:", error);
+      providers.value = [];
+      throw error;
+    }
+  }
+
   /** El backend devuelve `category_id`; la tabla muestra el nombre. */
   function categoryName(categoryId: string | null): string {
     if (categoryId === null) {
@@ -69,7 +82,7 @@ export const useReferencesStore = defineStore("references", () => {
   }
 
   return {
-    references, categories, total, isLoading, hasError, summary,
-    fetchReferences, fetchSummary, fetchCategories, categoryName,
+    references, categories, providers, total, isLoading, hasError, summary,
+    fetchReferences, fetchSummary, fetchCategories, fetchProviders, categoryName,
   };
 });

@@ -2,7 +2,9 @@ import { http } from "@/lib/axios";
 import type {
   ICategory,
   IPage,
+  IProvider,
   IReference,
+  IReferenceCreate,
   IReferenceFilters,
   IReferenceSummary,
 } from "./references.types";
@@ -12,12 +14,33 @@ export const referencesApi = {
     return http.get<IPage<IReference>>("/references/", { params });
   },
 
+  createReference(payload: IReferenceCreate) {
+    return http.post<IReference>("/references/", payload);
+  },
+
+  updateReference(id: string, payload: IReferenceCreate) {
+    return http.put<IReference>(`/references/${id}`, payload);
+  },
+
+  deleteReference(id: string) {
+    return http.delete<void>(`/references/${id}`);
+  },
+
+  /** Autocompletado/verificación por SKU exacto (`GET /references/lookup`); `null` si no existe. */
+  lookupReference(sku: string) {
+    return http.get<IReference | null>("/references/lookup", { params: { sku } });
+  },
+
   getSummary(latest = 5) {
     return http.get<IReferenceSummary>("/references/summary", { params: { latest } });
   },
 
   getCategories() {
     return http.get<ICategory[]>("/categories/");
+  },
+
+  getProviders() {
+    return http.get<IProvider[]>("/providers/");
   },
 
   /**

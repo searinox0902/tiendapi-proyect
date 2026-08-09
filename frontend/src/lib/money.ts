@@ -23,6 +23,25 @@ export function formatCurrency(value: Decimal | number): string {
 }
 
 /**
+ * Formatea un porcentaje con coma decimal ("36,81"), la misma convención que
+ * `formatCurrency`. Sin el símbolo `%`, para que quien lo use decida dónde va.
+ */
+export function formatPercentage(value: Decimal | string | number): string {
+  return toDecimal(value).toFixed(2).replace(".", ",");
+}
+
+/**
+ * Precio de venta con IVA, redondeado al múltiplo de $50 más cercano
+ * (D-45/D-46). Espejo en JS de `sale_price` (`backend/app/core/pricing.py`) —
+ * misma fórmula, mismo redondeo (`ROUND_HALF_UP`), para que la vista previa en
+ * el cliente coincida con lo que el servidor termina guardando de verdad.
+ */
+export function computeSalePrice(basePrice: Decimal.Value, ivaPercentage: Decimal.Value): Decimal {
+  const conIva = toDecimal(basePrice).times(toDecimal(ivaPercentage).dividedBy(100).plus(1));
+  return conIva.toNearest(50, Decimal.ROUND_HALF_UP);
+}
+
+/**
  * Campo numérico de Zod para dinero/porcentaje: convierte "" (input vacío) en
  * `undefined` para que `z.number()` lo marque como obligatorio en vez de
  * tratarlo como 0. Reusar en cualquier schema con un campo de este tipo.

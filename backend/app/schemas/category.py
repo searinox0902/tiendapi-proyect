@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class CategoryBase(BaseModel):
     name: str
     description: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class CategoryCreate(CategoryBase):

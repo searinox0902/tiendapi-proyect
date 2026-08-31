@@ -9,10 +9,12 @@ import {
   IconSearch,
   IconTrash,
 } from "@tabler/icons-vue"
+import { Moon, Sun } from "@lucide/vue"
 import { toast } from "vue-sonner"
 import { useRouter } from "vue-router"
 
 import AppSidebar from "@/components/AppSidebar.vue"
+import ModuleNavSelect from "@/components/ModuleNavSelect.vue"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,14 +40,16 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
+import { isDark } from "@/composables/useTheme"
 import { formatCurrency, toDecimal } from "@/lib/money"
 import { itemsApi } from "@/api/items/items.api"
 import { useItemsStore } from "@/stores/items"
 import { useReferencesStore } from "@/stores/references"
-import CreateExistenceDialog from "./CreateExistenceDialog.vue"
-import EditExistencesDialog from "./EditExistencesDialog.vue"
-import ItemsExistenceCard from "./itemsExistenceCard.vue"
-import type { IItemExistence, TItemStatus } from "@/api/items/items.types"
+import CreateStockUnitDialog from "./CreateStockUnitDialog.vue"
+import EditStockUnitsDialog from "./EditStockUnitsDialog.vue"
+import ItemStockUnitCard from "./itemStockUnitCard.vue"
+import type { IItemStockUnit, TItemStatus } from "@/api/items/items.types"
 
 const props = defineProps<{ referenceId: string }>()
 
@@ -56,7 +60,7 @@ const referencesStore = useReferencesStore()
 
 const isCreateDialogOpen = ref(false)
 const isEditDialogOpen = ref(false)
-/** IDs que va a tocar `EditExistencesDialog` — una sola desde el popover de una card, o toda `selectedIds` desde la botonera. */
+/** IDs que va a tocar `EditStockUnitsDialog` — una sola desde el popover de una card, o toda `selectedIds` desde la botonera. */
 const editIds = ref<string[]>([])
 
 const isDeleteConfirmOpen = ref(false)
@@ -100,7 +104,7 @@ watch(() => props.referenceId, () => {
 
 const summary = computed(() => store.detail?.summary ?? null)
 const totals = computed(() => store.detail?.totals ?? null)
-const existences = computed<IItemExistence[]>(() => store.detail?.existences ?? [])
+const stockUnits = computed<IItemStockUnit[]>(() => store.detail?.stock_units ?? [])
 
 /**
  * Opciones derivadas de las existencias que devolvió el servidor. Se excluye
@@ -110,12 +114,12 @@ const existences = computed<IItemExistence[]>(() => store.detail?.existences ?? 
  */
 const locationOptions = computed(() =>
   [...new Set(
-    existences.value.map(existence => existence.location_name).filter((name): name is string => name !== null),
+    stockUnits.value.map(stockUnit => stockUnit.location_name).filter((name): name is string => name !== null),
   )].sort(),
 )
 const providerOptions = computed(() =>
   [...new Set(
-    existences.value.map(existence => existence.provider_name).filter((name): name is string => name !== null),
+    stockUnits.value.map(stockUnit => stockUnit.provider_name).filter((name): name is string => name !== null),
   )].sort(),
 )
 
@@ -125,12 +129,12 @@ const providerOptions = computed(() =>
  * Referencia tuviera decenas de miles de unidades, el reemplazo es
  * `useVirtualList` (vueuse) o mover los filtros al backend.
  */
-const visibleExistences = computed(() =>
-  existences.value.filter((existence) => {
+const visibleStockUnits = computed(() =>
+  stockUnits.value.filter((stockUnit) => {
     const matchesId = filters.itemId === ""
-      || existence.item_id.toLowerCase().includes(filters.itemId.trim().toLowerCase())
-    const matchesLocation = filters.location === ALL || existence.location_name === filters.location
-    const matchesProvider = filters.provider === ALL || existence.provider_name === filters.provider
+      || stockUnit.item_id.toLowerCase().includes(filters.itemId.trim().toLowerCase())
+    const matchesLocation = filters.location === ALL || stockUnit.location_name === filters.location
+    const matchesProvider = filters.provider === ALL || stockUnit.provider_name === filters.provider
     return matchesId && matchesLocation && matchesProvider
   }),
 )
@@ -154,12 +158,12 @@ function goBack() {
   router.push({ name: "items" })
 }
 
-function addExistence() {
+function addStockUnit() {
   isCreateDialogOpen.value = true
 }
 
-function editExistence(existence: IItemExistence) {
-  editIds.value = [existence.item_id]
+function editStockUnit(stockUnit: IItemStockUnit) {
+  editIds.value = [stockUnit.item_id]
   isEditDialogOpen.value = true
 }
 
@@ -178,7 +182,7 @@ async function setStatus(ids: string[], targetStatus: TItemStatus) {
   )
   const succeeded = results.filter(result => result.status === "fulfilled").length
   const failed = results.length - succeeded
-  const verb = targetStatus === "de_baja"
+  const verb = targetStatus === "written_off"
     ? (succeeded === 1 ? "dada de baja" : "dadas de baja")
     : (succeeded === 1 ? "activada" : "activadas")
 
@@ -197,8 +201,8 @@ async function setStatus(ids: string[], targetStatus: TItemStatus) {
   }
 }
 
-function toggleExistenceStatus(existence: IItemExistence) {
-  setStatus([existence.item_id], existence.status === "de_baja" ? "disponible" : "de_baja")
+function toggleStockUnitStatus(stockUnit: IItemStockUnit) {
+  setStatus([stockUnit.item_id], stockUnit.status === "written_off" ? "available" : "written_off")
 }
 
 function bulkSetStatus(targetStatus: TItemStatus) {
@@ -211,8 +215,8 @@ function requestDelete(ids: string[]) {
   isDeleteConfirmOpen.value = true
 }
 
-function removeExistence(existence: IItemExistence) {
-  requestDelete([existence.item_id])
+function removeStockUnit(stockUnit: IItemStockUnit) {
+  requestDelete([stockUnit.item_id])
 }
 
 function bulkDelete() {
@@ -255,11 +259,11 @@ function toggleSelected(itemId: string, value: boolean) {
 
 /** "Todas" opera sobre lo que el filtro deja ver, no sobre el total del producto — seleccionar algo que no se ve confundiría más de lo que ayuda. */
 const isAllVisibleSelected = computed(() =>
-  visibleExistences.value.length > 0
-  && visibleExistences.value.every(existence => selectedIds.value.has(existence.item_id)),
+  visibleStockUnits.value.length > 0
+  && visibleStockUnits.value.every(stockUnit => selectedIds.value.has(stockUnit.item_id)),
 )
 const isSomeVisibleSelected = computed(() =>
-  visibleExistences.value.some(existence => selectedIds.value.has(existence.item_id)),
+  visibleStockUnits.value.some(stockUnit => selectedIds.value.has(stockUnit.item_id)),
 )
 const selectAllState = computed<boolean | "indeterminate">(() => {
   if (isAllVisibleSelected.value) return true
@@ -267,8 +271,8 @@ const selectAllState = computed<boolean | "indeterminate">(() => {
 })
 
 function toggleSelectAll(value: boolean) {
-  for (const existence of visibleExistences.value) {
-    toggleSelected(existence.item_id, value)
+  for (const stockUnit of visibleStockUnits.value) {
+    toggleSelected(stockUnit.item_id, value)
   }
 }
 
@@ -293,9 +297,12 @@ onMounted(() => {
           <div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
             <SidebarTrigger class="-ml-1" />
             <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
-            <h1 class="text-base font-medium">
-              Productos
-            </h1>
+            <ModuleNavSelect current="items" />
+            <div class="ml-auto flex items-center gap-2">
+              <Sun class="size-4 text-muted-foreground" />
+              <Switch v-model="isDark" aria-label="Cambiar a tema oscuro" />
+              <Moon class="size-4 text-muted-foreground" />
+            </div>
           </div>
         </header>
 
@@ -361,7 +368,7 @@ onMounted(() => {
               </div>
             </div>
 
-            <Button class="shrink-0 gap-2 text-white hover:text-white" @click="addExistence">
+            <Button class="shrink-0 gap-2 text-white hover:text-white" @click="addStockUnit">
               Agregar Existencia
               <IconPlus class="size-4" />
             </Button>
@@ -414,7 +421,7 @@ onMounted(() => {
                 <p class="text-sm text-muted-foreground">
                   Total Existencias
                 </p>
-                <p class="text-2xl font-bold tabular-nums text-primary">
+                <p class="text-2xl font-bold tabular-nums text-brand-icon">
                   {{ formatTotal(totals.total_value) }}
                 </p>
               </div>
@@ -488,14 +495,14 @@ onMounted(() => {
           </div>
 
           <div
-            v-else-if="existences.length === 0"
+            v-else-if="stockUnits.length === 0"
             class="rounded-lg border border-dashed border-border py-16 text-center text-muted-foreground"
           >
             Este producto no tiene existencias registradas.
           </div>
 
           <div
-            v-else-if="visibleExistences.length === 0"
+            v-else-if="visibleStockUnits.length === 0"
             class="rounded-lg border border-dashed border-border py-16 text-center text-muted-foreground"
           >
             No hay existencias que coincidan con los filtros.
@@ -524,11 +531,11 @@ onMounted(() => {
                   <IconPencil class="size-4" />
                   Editar
                 </Button>
-                <Button variant="outline" size="sm" class="gap-1.5" @click="bulkSetStatus('de_baja')">
+                <Button variant="outline" size="sm" class="gap-1.5" @click="bulkSetStatus('written_off')">
                   <IconRotate class="size-4" />
                   Dar de baja
                 </Button>
-                <Button variant="outline" size="sm" class="gap-1.5" @click="bulkSetStatus('disponible')">
+                <Button variant="outline" size="sm" class="gap-1.5" @click="bulkSetStatus('available')">
                   <IconRotate class="size-4" />
                   Activar
                 </Button>
@@ -545,31 +552,31 @@ onMounted(() => {
             </div>
 
             <div class="space-y-3">
-              <ItemsExistenceCard
-                v-for="existence in visibleExistences"
-                :key="existence.item_id"
-                :existence="existence"
-                :selected="selectedIds.has(existence.item_id)"
-                @update:selected="(value) => toggleSelected(existence.item_id, value)"
-                @edit="editExistence"
-                @remove="removeExistence"
-                @toggle-status="toggleExistenceStatus"
+              <ItemStockUnitCard
+                v-for="stockUnit in visibleStockUnits"
+                :key="stockUnit.item_id"
+                :stock-unit="stockUnit"
+                :selected="selectedIds.has(stockUnit.item_id)"
+                @update:selected="(value) => toggleSelected(stockUnit.item_id, value)"
+                @edit="editStockUnit"
+                @remove="removeStockUnit"
+                @toggle-status="toggleStockUnitStatus"
               />
             </div>
           </template>
 
           <p
-            v-if="!store.isLoadingDetail && existences.length > 0"
+            v-if="!store.isLoadingDetail && stockUnits.length > 0"
             class="text-center text-sm text-muted-foreground"
           >
-            {{ visibleExistences.length }} de {{ existences.length }}
-            {{ existences.length === 1 ? "existencia" : "existencias" }}
+            {{ visibleStockUnits.length }} de {{ stockUnits.length }}
+            {{ stockUnits.length === 1 ? "existencia" : "existencias" }}
           </p>
         </template>
       </div>
     </SidebarInset>
 
-    <CreateExistenceDialog
+    <CreateStockUnitDialog
       v-if="summary"
       v-model:open="isCreateDialogOpen"
       :reference-id="summary.reference_id"
@@ -578,11 +585,11 @@ onMounted(() => {
       @created="load"
     />
 
-    <EditExistencesDialog
+    <EditStockUnitsDialog
       v-model:open="isEditDialogOpen"
       :item-ids="editIds"
       :providers="referencesStore.providers"
-      :existences="existences"
+      :stock-units="stockUnits"
       @updated="load"
     />
 

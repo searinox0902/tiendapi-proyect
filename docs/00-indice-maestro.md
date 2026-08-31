@@ -23,6 +23,7 @@ Esta documentación reorganiza los dos informes originales en documentos temáti
 | 10 | [Infraestructura de desarrollo y empaquetado](10-infraestructura-dev-y-empaquetado.md) | Levantar backend+BBDD con Docker, CI, instalador Tauri, topología dev vs objetivo | Poner a correr el proyecto en equipo, hacer builds del `.exe`, entender la diferencia dev/objetivo |
 | 11 | [Informe: Offline, resiliencia y facturación](11-offline-resiliencia-y-facturacion.md) | Operación sin red, maestro/esclavo, recuperación ante fallas, agregar/anular factura | Entender la operación real de un negocio, la resiliencia y el modelo de facturas append-only |
 | 12 | [Guía: conectar el login del frontend a la API](12-guia-consumo-api-auth.md) | Contrato de auth (endpoints, token JWT, CORS) para consumir el backend desde Vue | Wirear el login/las llamadas autenticadas desde el frontend |
+| 13 | [Módulo de Nómina (mini-gestor)](13-modulo-nomina.md) | Diseño funcional y flujos UX/UI del módulo de nómina: captura por excepción, periodicidad quincenal/mensual, motor de cálculo, pantallas | Construir o discutir el módulo de Nómina (post-MVP, D-97 a D-102) |
 | API | [Referencia de API por módulo](api/README.md) | Endpoints HTTP documentados uno a uno (request/response/errores), por módulo del backend | Implementar o mantener un endpoint concreto; ver el contrato exacto de un módulo |
 
 ## Convenciones

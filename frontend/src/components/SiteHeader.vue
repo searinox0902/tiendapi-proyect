@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { Moon, Sun } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { Switch } from '@/components/ui/switch'
+import { isDark } from '@/composables/useTheme'
 </script>
 
 <template>
@@ -16,6 +19,11 @@ import { SidebarTrigger } from '@/components/ui/sidebar'
         Documents
       </h1>
       <div class="ml-auto flex items-center gap-2">
+        <div class="flex items-center gap-2">
+          <Sun class="size-4 text-muted-foreground" />
+          <Switch v-model="isDark" aria-label="Cambiar a tema oscuro" />
+          <Moon class="size-4 text-muted-foreground" />
+        </div>
         <Button variant="ghost" as-child size="sm" class="hidden sm:flex">
           <a
             href="https://github.com/shadcn-ui/ui/tree/main/apps/v4/app/(examples)/dashboard"

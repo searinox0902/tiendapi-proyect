@@ -139,8 +139,8 @@ def main(reset: bool) -> None:
             # El costo de compra es 100% manual (D-52) y el catálogo existente no
             # lo trae; se rellena acá para que la pantalla de detalle no muestre
             # toda la columna en "—".
-            if reference.precio_proveedor is None:
-                reference.precio_proveedor = _round_50(
+            if reference.provider_price is None:
+                reference.provider_price = _round_50(
                     reference.base_price * Decimal(rng.randint(68, 82)) / Decimal(100)
                 )
 

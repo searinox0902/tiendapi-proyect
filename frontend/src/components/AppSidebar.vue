@@ -1,16 +1,8 @@
 <script setup lang="ts">
-import {
-  IconCashRegister,
-  IconDashboard,
-  IconInnerShadowTop,
-  IconLogout,
-  IconPackage,
-  IconReceipt,
-  IconReport,
-  IconTags,
-} from "@tabler/icons-vue"
+import { IconInnerShadowTop, IconLogout } from "@tabler/icons-vue"
 import { useRoute, useRouter } from "vue-router"
 
+import { navGroups } from "@/config/navigation"
 import { useAuthStore } from "@/stores/auth"
 import {
   Sidebar,
@@ -24,39 +16,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-
-/**
- * Botonera del sidebar, agrupada por área. `label` es el mini-título del grupo
- * (omitirlo lo deja sin título); `to` apunta al `name` de una ruta del router.
- * Para agregar una opción basta con una línea más en el grupo que corresponda.
- */
-const groups = [
-  {
-    items: [
-      { title: "Dashboard", to: "dashboard", icon: IconDashboard },
-    ],
-  },
-  {
-    label: "Gestión logística",
-    items: [
-      { title: "Referencias", to: "references", icon: IconTags },
-      { title: "Productos", to: "items", icon: IconPackage },
-    ],
-  },
-  {
-    label: "Ventas",
-    items: [
-      { title: "Caja registradora", to: "pos", icon: IconCashRegister },
-      { title: "Registro de ventas", to: "blank", icon: IconReceipt },
-    ],
-  },
-  {
-    label: "Reportes",
-    items: [
-      { title: "Reporte DIAN", to: "blank", icon: IconReport },
-    ],
-  },
-]
 
 const route = useRoute()
 const router = useRouter()
@@ -78,7 +37,7 @@ function logout() {
             class="data-[slot=sidebar-menu-button]:!p-1.5"
           >
             <RouterLink :to="{ name: 'dashboard' }">
-              <IconInnerShadowTop class="!size-5" />
+              <IconInnerShadowTop class="!size-5 text-brand-icon" />
               <span class="text-base font-semibold">TiendAPI</span>
             </RouterLink>
           </SidebarMenuButton>
@@ -87,7 +46,7 @@ function logout() {
     </SidebarHeader>
 
     <SidebarContent>
-      <SidebarGroup v-for="(group, index) in groups" :key="group.label ?? index">
+      <SidebarGroup v-for="(group, index) in navGroups" :key="group.label ?? index">
         <SidebarGroupLabel v-if="group.label">
           {{ group.label }}
         </SidebarGroupLabel>
@@ -100,7 +59,7 @@ function logout() {
                 :is-active="route.name === item.to"
               >
                 <RouterLink :to="{ name: item.to }">
-                  <component :is="item.icon" />
+                  <component :is="item.icon" class="text-brand-icon" />
                   <span>{{ item.title }}</span>
                 </RouterLink>
               </SidebarMenuButton>

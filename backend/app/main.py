@@ -65,6 +65,7 @@ def health_check() -> dict[str, str]:
         "status": "ok" if db_ok else "degraded",
         "database": "connected" if db_ok else "unreachable",
         "environment": settings.environment,
+        "version": settings.app_version,
     }
 
 

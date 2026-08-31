@@ -3,6 +3,12 @@ import { useAuthStore } from "@/stores/auth";
 
 export const http = axios.create({
   baseURL: `${import.meta.env.VITE_API_URL}/api/v1`,
+  //  Arrays como `ids=a&ids=b` y no `ids[]=a&ids[]=b`, que es el default de
+  //  axios: FastAPI lee las repeticiones del mismo nombre para armar una
+  //  `list[...]`, y con los corchetes el parámetro le llega vacío sin error
+  //  visible — la petición responde 200 con el filtro ignorado, que es peor
+  //  que fallar. `indexes: null` es lo que produce la forma repetida.
+  paramsSerializer: { indexes: null },
 });
 
 http.interceptors.request.use((config) => {

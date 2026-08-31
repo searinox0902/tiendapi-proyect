@@ -6,4 +6,14 @@ export interface ILocation {
   name: string;
   address: string | null;
   type: TLocationType;
+  created_at: string;
+  updated_at: string;
+  version: number;
+}
+
+/** Body de `POST /locations/`. */
+export interface ILocationCreate {
+  name: string;
+  address?: string | null;
+  type: TLocationType;
 }

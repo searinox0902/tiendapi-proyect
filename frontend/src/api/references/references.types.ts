@@ -20,8 +20,8 @@ export interface IReference {
   image_url: string | null;
   base_price: string;
   iva_percentage: string;
-  /** Costo de adquisición (lado compra), independiente de base_price/sale_price (lado venta). `null` si aún no se capturó. */
-  precio_proveedor: string | null;
+  /** Costo de adquisición (lado compra), independiente de base_price/sale_price (lado venta). `null` si aún no se capturó. Su override por unidad es `IItemStockUnit.provider_price`. */
+  provider_price: string | null;
   created_at: string;
   updated_at: string;
   version: number;
@@ -38,7 +38,7 @@ export interface IReferenceCreate {
   image_url?: string | null;
   base_price: number;
   iva_percentage: number;
-  precio_proveedor?: number | null;
+  provider_price?: number | null;
 }
 
 /** Query params que acepta `GET /references/`. */
@@ -54,6 +54,30 @@ export interface IReferenceFilters {
   category_id?: string;
   skip?: number;
   limit?: number;
+}
+
+/**
+ * Formatos de `GET /references/export` (D-73). El **JSON es el de intercambio**
+ * (round-trip fiel, FKs por nombre, plata como string); Excel y Markdown son
+ * salida humana — que algo salga en un formato no implica que pueda volver a
+ * entrar por ahí.
+ */
+export type TExportFormat = "json" | "xlsx" | "markdown";
+
+/**
+ * Respuesta de `GET /references/variants` (D-90).
+ *
+ * Una variante es una Referencia propia con SKU único (`ABC#2`); lo único que
+ * comparte con sus hermanas es la base del código. Esto es lo que el
+ * formulario necesita para ofrecer "ya existe, ¿crear una variante?".
+ */
+export interface IReferenceVariantInfo {
+  base_sku: string;
+  exists: boolean;
+  /** Incluye la pieza base: si hay una sola, cuenta 1. */
+  variant_count: number;
+  /** Código libre para la variante nueva; si el SKU no existe, es el propio código base. */
+  next_sku: string;
 }
 
 /** Fila de la card "Últimas referencias creadas". */
@@ -99,4 +123,40 @@ export interface IProvider {
   created_at: string;
   updated_at: string;
   version: number;
+}
+
+/* ── Importación de catálogo (D-73) ────────────────────────────────────────
+ * El payload que se manda es el mismo objeto que devuelve
+ * `GET /references/export?format=json` — no hay un tipo de "solicitud" propio,
+ * es literalmente el archivo. */
+
+export interface IReferenceImportInvalidRow {
+  index: number;
+  sku: string | null;
+  reason: string;
+}
+
+/** Respuesta de `POST /references/import/preview` — no escribe nada. */
+export interface IReferenceImportPreview {
+  total_rows: number;
+  new_count: number;
+  existing_skus: string[];
+  invalid: IReferenceImportInvalidRow[];
+  new_providers: string[];
+  new_categories: string[];
+  /** `null` para un archivo JSON — solo el .xlsx tiene encabezados que detectar. */
+  columns_detected: string[] | null;
+  /** Columnas opcionales que el archivo no trae — esas filas quedan con el valor por defecto (Nombre → SKU, Proveedor → placeholder, IVA % → 0). */
+  columns_missing: string[] | null;
+  /** Encabezados del archivo que no corresponden a ninguna columna conocida y se descartan (ej. `URL` de un scraper). */
+  columns_ignored: string[] | null;
+}
+
+/** Respuesta de `POST /references/import` — ya escribió en la BBDD. */
+export interface IReferenceImportResult {
+  created: number;
+  skipped: number;
+  invalid: number;
+  /** `null` si `created === 0`: no hay lote que deshacer. */
+  batch_id: string | null;
 }

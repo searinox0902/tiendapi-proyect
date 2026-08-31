@@ -3,11 +3,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_tenant_id
+from app.api.deps import ImageResolver, get_db, get_image_resolver, get_tenant_id
 from app.api.filters import contains as _contains
 from app.core.pricing import sale_price as _sale_price
 from app.crud.base import CRUDBase
@@ -42,6 +42,10 @@ class StockStatus(str, Enum):
 class StockSort(str, Enum):
     NEWEST = "newest"
     OLDEST = "oldest"
+    #  Con existencias primero, agotados al final. Es el orden de la caja
+    #  registradora: lo vendible tiene que estar arriba, pero lo agotado no se
+    #  esconde — desde ahí se le agregan existencias en el momento.
+    AVAILABLE_FIRST = "available_first"
 
 
 #  Umbral de "stock bajo": a partir de acá conviene reponer antes de agotarse.
@@ -53,6 +57,29 @@ LOW_STOCK_THRESHOLD = 5
 def _units_expression():
     """Unidades por Referencia — `COUNT` sobre el LEFT JOIN, así que 0 si no hay Ítems."""
     return func.count(Item.id)
+
+
+def _available_join(tenant_id: uuid.UUID):
+    """
+    `ON` del LEFT JOIN a Ítems para todo lo que cuente **existencias**.
+
+    Filtra a `status='available'`: una unidad vendida o dada de baja no es
+    inventario. Sin esto la pantalla mostraba 11 unidades de un producto del
+    que solo quedaban 7 vendibles, y el cobro fallaba con un 409 después de
+    que el cajero ya la había agregado al carrito. Es además lo que fija D-49
+    para el valor de bodega (`WHERE status='available'`).
+
+    Va en el `ON` y no en el `WHERE` por la misma razón que `tenant_id`: en el
+    `WHERE` convertiría el LEFT JOIN en INNER y desaparecerían justamente las
+    Referencias agotadas, que son las que la pantalla tiene que mostrar.
+
+    Compartido por la grilla y el resumen para que no puedan contar distinto.
+    """
+    return (
+        (Item.reference_id == Reference.id)
+        & (Item.tenant_id == tenant_id)
+        & (Item.status == "available")
+    )
 
 
 def _last_movement_expression():
@@ -89,6 +116,7 @@ def _stock_conditions(
     title: str | None,
     brand: str | None,
     category_id: uuid.UUID | None,
+    search: str | None = None,
 ) -> list:
     """
     Filtros de la pantalla Productos, compartidos por la grilla y su resumen.
@@ -98,6 +126,10 @@ def _stock_conditions(
     corresponderían a las cards de abajo y no habría cómo notarlo mirando.
 
     Son todas columnas de `Reference` — el `Item` no duplica ninguna.
+
+    `search` es aparte de `sku`/`title` porque los une con **OR**: un solo
+    campo de búsqueda (la caja registradora) contra dos columnas. Cruzarlos con
+    AND exigiría que el término estuviera en las dos a la vez.
     """
     conditions = [Reference.tenant_id == tenant_id]
     if sku:
@@ -106,6 +138,14 @@ def _stock_conditions(
         conditions.append(Reference.title.ilike(_contains(title), escape="\\"))
     if brand:
         conditions.append(Reference.brand.ilike(_contains(brand), escape="\\"))
+    if search:
+        pattern = _contains(search)
+        conditions.append(
+            or_(
+                Reference.sku.ilike(pattern, escape="\\"),
+                Reference.title.ilike(pattern, escape="\\"),
+            )
+        )
     if category_id is not None:
         conditions.append(Reference.category_id == category_id)
     return conditions
@@ -128,19 +168,25 @@ def list_stock(
     sku: str | None = Query(None, description="Coincidencia parcial, ignora mayúsculas"),
     title: str | None = Query(None, description="Coincidencia parcial, ignora mayúsculas"),
     brand: str | None = Query(None, description="Coincidencia parcial, ignora mayúsculas"),
+    search: str | None = Query(None, description="Coincidencia parcial en SKU **o** nombre"),
     category_id: uuid.UUID | None = Query(None, description="Categoría exacta"),
     stock_status: StockStatus = Query(StockStatus.ALL, description="Estado de existencia"),
-    sort: StockSort = Query(StockSort.NEWEST, description="Orden por última entrada de mercancía"),
+    sort: StockSort = Query(StockSort.NEWEST, description="Orden de la grilla"),
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    resolve_image: ImageResolver = Depends(get_image_resolver),
 ):
     """
-    Existencias agregadas por Referencia — alimenta la grilla de la pantalla
-    Productos (CRUD Productos, D-51).
+    Existencias agregadas por Referencia — alimenta la grilla de Productos
+    (CRUD Productos, D-51) y la de la caja registradora.
 
     Los filtros de texto (SKU, nombre, marca, categoría) son todos columnas de
     `Reference`: el `Item` no duplica ninguno, por eso la consulta parte de la
     Referencia y agrega los Ítems encima, y no al revés.
+
+    `search` cruza SKU y nombre con **OR** (los otros dos se cruzan con AND):
+    en la caja hay un solo campo de búsqueda y el cajero no sabe —ni debería—
+    si lo que tiene en la mano es un código o un nombre.
 
     `stock_status` es distinto: filtra sobre el **conteo agregado** de unidades,
     así que va en `HAVING`, no en `WHERE`. Es lo que hace clicables las cards de
@@ -148,18 +194,15 @@ def list_stock(
 
     **`LEFT JOIN` deliberado:** las Referencias sin ningún Ítem también salen,
     con `units = 0`. Una pantalla de inventario que esconde lo agotado es justo
-    la que no sirve para reponer.
+    la que no sirve para reponer — y en la caja, es desde esa card agotada que
+    se agregan existencias en el momento.
     """
-    conditions = _stock_conditions(tenant_id, sku, title, brand, category_id)
+    conditions = _stock_conditions(tenant_id, sku, title, brand, category_id, search)
     having = _stock_having(stock_status)
     units = _units_expression()
     last_movement = _last_movement_expression()
 
-    # El `tenant_id` va también en el ON del LEFT JOIN, no en el WHERE: en el
-    # WHERE convertiría el LEFT JOIN en INNER (la fila sin Ítems tiene
-    # `Item.tenant_id` NULL y fallaría la comparación), y desaparecerían
-    # justamente las Referencias agotadas.
-    join_on = (Item.reference_id == Reference.id) & (Item.tenant_id == tenant_id)
+    join_on = _available_join(tenant_id)
 
     # `total` cuenta Referencias que pasan el filtro, no Ítems: es el número de
     # cards que hay que paginar. Contar Ítems daría un total inflado y páginas
@@ -179,13 +222,22 @@ def list_stock(
 
     # Desempate por `id` porque el SKU no es único a nivel de esquema y dos
     # productos con la misma fecha alternarían de orden entre peticiones.
-    order = last_movement.desc() if sort is StockSort.NEWEST else last_movement.asc()
+    if sort is StockSort.AVAILABLE_FIRST:
+        #  `units == 0` da False (0) para lo vendible y True (1) para lo
+        #  agotado; ascendente deja lo vendible arriba. Dentro de cada grupo se
+        #  mantiene el orden por última entrada, para que lo recién llegado
+        #  siga apareciendo primero.
+        order_by = [(units == 0).asc(), last_movement.desc(), Reference.id.desc()]
+    else:
+        order = last_movement.desc() if sort is StockSort.NEWEST else last_movement.asc()
+        order_by = [order, Reference.id.desc()]
+
     stmt = (
         select(Reference, units.label("units"))
         .outerjoin(Item, join_on)
         .where(*conditions)
         .group_by(Reference.id)
-        .order_by(order, Reference.id.desc())
+        .order_by(*order_by)
         .offset(skip)
         .limit(limit)
     )
@@ -200,10 +252,12 @@ def list_stock(
                 "sku": reference.sku,
                 "title": reference.title,
                 "brand": reference.brand,
-                "image_url": reference.image_url,
+                "image_url": resolve_image(reference.sku, reference.image_url),
                 "category_id": reference.category_id,
                 "units": units,
                 "sale_price": _sale_price(reference.base_price, reference.iva_percentage),
+                "base_price": reference.base_price,
+                "iva_percentage": reference.iva_percentage,
             }
             for reference, units in rows
         ],
@@ -252,11 +306,11 @@ def stock_summary(
         select(
             Reference.base_price,
             Reference.iva_percentage,
-            Reference.precio_proveedor,
+            Reference.provider_price,
             func.count(Item.id).label("units"),
         )
         .select_from(Reference)
-        .outerjoin(Item, (Item.reference_id == Reference.id) & (Item.tenant_id == tenant_id))
+        .outerjoin(Item, _available_join(tenant_id))
         .where(*conditions)
         .group_by(Reference.id)
     ).all()
@@ -269,7 +323,7 @@ def stock_summary(
     total_sale_value = Decimal(0)
     units_without_cost = 0
 
-    for base_price, iva_percentage, precio_proveedor, units in rows:
+    for base_price, iva_percentage, provider_price, units in rows:
         total_units += units
         if 0 < units <= LOW_STOCK_THRESHOLD:
             low_stock += 1
@@ -277,13 +331,17 @@ def stock_summary(
             out_of_stock += 1
             continue
         total_sale_value += _sale_price(base_price, iva_percentage) * units
-        if precio_proveedor is None:
+        if provider_price is None:
             # No se asume un costo: se cuenta aparte para que la UI pueda avisar
             # que `total_cost` está incompleto en vez de mentir por omisión.
             units_without_cost += units
         else:
-            total_cost += precio_proveedor * units
+            total_cost += provider_price * units
 
+    #  `total_sale_value` incluye IVA (`_sale_price`) y `total_cost` no
+    #  (`provider_price` se captura sin IVA, A-26) — mezcla deliberada, mismo
+    #  criterio que `total_profit` en bills.py: ver D-70/A-26 antes de "arreglar"
+    #  este margen para que quede neto de IVA.
     potential_margin = total_sale_value - total_cost
     margin_percentage = (
         (potential_margin / total_sale_value * 100).quantize(
@@ -312,6 +370,7 @@ def get_detail_by_reference(
     reference_id: uuid.UUID,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
+    resolve_image: ImageResolver = Depends(get_image_resolver),
 ):
     """
     Cabecera + totales + **todas** las existencias de una Referencia — alimenta
@@ -387,7 +446,7 @@ def get_detail_by_reference(
     # VIGENTES de catálogo (no una foto fija del día que se creó); una unidad
     # editada (migraciones 0007/0008) queda fija en lo que se le escribió, sin
     # arrastrar a las demás existencias de la misma Referencia.
-    existences = [
+    stock_units = [
         {
             "item_id": item_id,
             "status": item_status,
@@ -397,7 +456,7 @@ def get_detail_by_reference(
             "location_name": location_name,
             "iva_percentage": item_iva if item_iva is not None else reference.iva_percentage,
             "provider_price": (
-                item_cost if item_cost is not None else reference.precio_proveedor
+                item_cost if item_cost is not None else reference.provider_price
             ),
             "base_price": item_base if item_base is not None else reference.base_price,
             "sale_price": current_price,
@@ -411,7 +470,7 @@ def get_detail_by_reference(
     # Cuenta TODAS las filas sin importar `status`: una unidad "de baja" sigue
     # siendo capital físico en bodega hasta que alguien la elimine de verdad.
     # Si el negocio prefiere que el resumen refleje solo lo vendible, este es
-    # el lugar para filtrar por `status != 'de_baja'` — decisión de negocio
+    # el lugar para filtrar por `status != 'written_off'` — decisión de negocio
     # que no se tomó por mi cuenta, queda anotada para revisar.
     #
     # `total_base`/`total_value` son la SUMA de lo que cada unidad tiene de
@@ -421,8 +480,8 @@ def get_detail_by_reference(
     # del catálogo. `total_iva` se deriva hacia atrás de la diferencia, mismo
     # principio que ya usa la factura para desglosar IVA de un total conocido.
     total_units = len(rows)
-    total_base = sum((existence["base_price"] for existence in existences), Decimal(0))
-    total_value = sum((existence["sale_price"] for existence in existences), Decimal(0))
+    total_base = sum((unit["base_price"] for unit in stock_units), Decimal(0))
+    total_value = sum((unit["sale_price"] for unit in stock_units), Decimal(0))
     total_iva = total_value - total_base
 
     return {
@@ -431,7 +490,7 @@ def get_detail_by_reference(
             "sku": reference.sku,
             "title": reference.title,
             "brand": reference.brand,
-            "image_url": reference.image_url,
+            "image_url": resolve_image(reference.sku, reference.image_url),
             "category_id": reference.category_id,
             "category_name": category_name,
             # Se excluye `None`: una unidad sin proveedor asignado todavía no
@@ -447,7 +506,7 @@ def get_detail_by_reference(
             "total_iva": total_iva,
             "total_value": total_base + total_iva,
         },
-        "existences": existences,
+        "stock_units": stock_units,
     }
 
 
@@ -481,7 +540,7 @@ def update_item(
 ):
     """
     Actualización parcial — un mismo endpoint para "dar de baja"/"activar"
-    (`{"status": "de_baja" | "disponible"}`) y para reasignar proveedor/ubicación
+    (`{"status": "written_off" | "available"}`) y para reasignar proveedor/ubicación
     en lote (`{"provider_id": ...}` y/o `{"location_id": ...}`), sea una
     existencia o muchas: el cliente llama esto una vez por Ítem seleccionado.
 

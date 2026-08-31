@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Nombre completo del producto tal como aparece en la página (incluye modelo de moto y marca del repuesto si están en el título)."
+    },
+    "sku": {
+      "type": "string",
+      "description": "Código/referencia interna del producto si el sitio lo muestra (ej. junto al nombre o en una ficha de detalle). Vacío si no es visible."
+    },
+    "brand": {
+      "type": "string",
+      "description": "Marca del REPUESTO (quién lo fabrica: VITRIX, DID, NGK, etc.), no la marca de la moto."
+    },
+    "compatible_model": {
+      "type": "string",
+      "description": "Modelo(s) de moto con los que el producto es compatible, tal como aparece en el título o ficha (ej. 'PULSAR 200NS/220S')."
+    },
+    "category": {
+      "type": "string",
+      "description": "Categoría o tipo de pieza (ej. Frenos, Cadenillas, Filtros)."
+    },
+    "price_regular": {
+      "type": "number",
+      "description": "Precio de lista antes de descuento, si el sitio muestra un precio tachado. Null si no hay descuento."
+    },
+    "price_offer": {
+      "type": "number",
+      "description": "Precio final mostrado al comprador (el que pagaría hoy)."
+    },
+    "image_url": {
+      "type": "string",
+      "description": "URL absoluta de la imagen principal del producto."
+    },
+    "in_stock": {
+      "type": "boolean",
+      "description": "true si el producto está disponible para compra, false si aparece agotado/sin stock."
+    },
+    "description": {
+      "type": "string",
+      "description": "Texto descriptivo adicional del producto si existe (especificaciones, notas)."
+    }
+  },
+  "required": ["title", "price_offer"]
+}

@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.bill import Bill
 from app.models.bill_item import BillItem
+from app.models.brand import Brand
 from app.models.category import Category
 from app.models.customer import Customer
 from app.models.item import Item
@@ -16,6 +17,7 @@ __all__ = [
     "User",
     "Provider",
     "Category",
+    "Brand",
     "Location",
     "Reference",
     "Item",

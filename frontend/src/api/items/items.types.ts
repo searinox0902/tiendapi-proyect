@@ -18,10 +18,13 @@ export interface IItemStock {
   brand: string | null;
   image_url: string | null;
   category_id: string | null;
-  /** Unidades en existencia = cuántos `Item` apuntan a esta Referencia. */
+  /** Unidades **vendibles** (`status='available'`). 0 = agotado, no "sin catálogo". */
   units: number;
   /** Precio de venta con IVA (D-45/D-46). Llega como string para no perder precisión. */
   sale_price: string;
+  /** Base e IVA de catálogo — la caja arma la línea de venta con esto, sin pedir la Referencia aparte. */
+  base_price: string;
+  iva_percentage: string;
 }
 
 /**
@@ -42,27 +45,31 @@ export interface IItemStockSummary {
   low_stock_references: number;
   /** Umbral usado para `low_stock_references` — viene del servidor para no hardcodearlo en la UI. */
   low_stock_threshold: number;
-  /** Capital inmovilizado: Σ(precio_proveedor × unidades). */
+  /** Capital inmovilizado: Σ(provider_price × unidades). */
   total_cost: string;
-  /** Σ(precio_venta × unidades) — lo que entraría si se vendiera todo. */
+  /** Σ(sale_price × unidades) — lo que entraría si se vendiera todo. */
   total_sale_value: string;
   potential_margin: string;
   /** Margen bruto sobre la venta, en %. */
   margin_percentage: string;
-  /** Unidades sin `precio_proveedor` cargado: `total_cost` está incompleto si es > 0. */
+  /** Unidades sin `provider_price` cargado: `total_cost` está incompleto si es > 0. */
   units_without_cost: number;
 }
 
 /**
- * Una unidad física concreta (`ItemExistenceRead`) — fila de la pantalla de
+ * Ciclo de vida de la unidad física — docs/03-modelo-datos.md §1.3 (D-41).
+ * Valores en inglés desde la migración `0012` (D-63); `written_off` es la baja
+ * manual (dañada, extraviada), no una desactivación temporal.
+ */
+export type TItemStatus = "available" | "sold" | "reserved" | "written_off";
+
+/**
+ * Una unidad física concreta (`ItemStockUnitRead`) — fila de la pantalla de
  * aterrizaje del Producto. A diferencia de `IItemStock`, que agrega y cuenta,
  * acá cada objeto ES un `Item` con su identidad propia (D-41): `item_id` es lo
  * que el cajero teclea para vender esta unidad y no otra (A-22).
  */
-/** Ciclo de vida de la unidad física — docs/03-modelo-datos.md §1.3 (D-41). */
-export type TItemStatus = "disponible" | "vendido" | "reservado" | "de_baja";
-
-export interface IItemExistence {
+export interface IItemStockUnit {
   item_id: string;
   status: TItemStatus;
   /** Opcional (migración 0005): el alta manual rápida no exige elegirlo en el momento. */
@@ -154,7 +161,7 @@ export interface IItemUpdatePayload {
 export interface IItemDetail {
   summary: IProductSummary;
   totals: IItemDetailTotals;
-  existences: IItemExistence[];
+  stock_units: IItemStockUnit[];
 }
 
 /**
@@ -163,17 +170,85 @@ export interface IItemDetail {
  */
 export type TStockStatus = "all" | "out_of_stock" | "low_stock" | "in_stock";
 
-/** Orden por última entrada de mercancía (o alta en catálogo si nunca tuvo). */
-export type TStockSort = "newest" | "oldest";
+/**
+ * Orden de la grilla. `newest`/`oldest` van por última entrada de mercancía (o
+ * alta en catálogo si nunca tuvo); `available_first` deja lo vendible arriba y
+ * lo agotado al final — el orden de la caja registradora.
+ */
+export type TStockSort = "newest" | "oldest" | "available_first";
 
 /** Query params que acepta `GET /items/stock`. */
 export interface IItemStockFilters {
   sku?: string;
   title?: string;
   brand?: string;
+  /** SKU **o** nombre en un solo término (OR en el backend). `sku`/`title` se cruzan con AND. */
+  search?: string;
   category_id?: string;
   stock_status?: TStockStatus;
   sort?: TStockSort;
   skip?: number;
   limit?: number;
+}
+
+/**
+ * Importación de Productos/existencias (A-30).
+ *
+ * La frontera unidad/variante la decide el backend: con el mismo SKU, un
+ * proveedor o una ubicación distintos son **unidades** del mismo producto; un
+ * **nombre** distinto es otra pieza y se crea como variante `#N` (D-90).
+ */
+export interface IProductImportInvalidRow {
+  index: number;
+  sku: string | null;
+  reason: string;
+}
+
+/** Variante que la importación va a crear, con el código ya asignado. */
+export interface IProductImportVariant {
+  base_sku: string;
+  sku: string;
+  title: string;
+  units: number;
+}
+
+/**
+ * Dato de catálogo del archivo que no coincide con la Referencia existente.
+ * **No se aplica**: el archivo de existencias nunca edita el catálogo.
+ */
+export interface IProductImportDiscrepancy {
+  sku: string;
+  fields: string[];
+}
+
+export interface IProductImportPreview {
+  total_rows: number;
+  /** Existencias a crear — una fila de `Item` por unidad (D-41), no filas del archivo. */
+  units_total: number;
+  matched_count: number;
+  new_references: string[];
+  new_variants: IProductImportVariant[];
+  invalid: IProductImportInvalidRow[];
+  new_providers: string[];
+  new_locations: string[];
+  new_categories: string[];
+  discrepancies: IProductImportDiscrepancy[];
+  /** `null` en un archivo JSON — solo el .xlsx tiene encabezados que detectar. */
+  columns_detected: string[] | null;
+  columns_missing: string[] | null;
+  columns_ignored: string[] | null;
+}
+
+export interface IProductImportResult {
+  units_created: number;
+  references_created: number;
+  variants_created: number;
+  invalid: number;
+  batch_id: string | null;
+}
+
+export interface IProductImportUndoResult {
+  units_deleted: number;
+  references_deleted: number;
+  directory_deleted: number;
 }

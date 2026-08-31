@@ -1,11 +1,12 @@
 import uuid
-from typing import Generator
+from typing import Callable, Generator, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.images import resolve_image_url
 from app.core.security import decode_access_token
 from app.models.user import User
 
@@ -53,3 +54,28 @@ def get_tenant_id(current_user: User = Depends(get_current_user)) -> uuid.UUID:
     falsificable sin la clave del servidor.
     """
     return current_user.tenant_id
+
+
+#  `(sku, url_guardada) -> url_a_mostrar`. Se tipa para que los routers no
+#  tengan que importar `Callable[...]` cada uno por su lado.
+ImageResolver = Callable[[str, Optional[str]], Optional[str]]
+
+
+def get_image_resolver(
+    request: Request,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+) -> ImageResolver:
+    """
+    Resolvedor de imagen de Referencia ya atado a este tenant y a este request (D-84).
+
+    Existe como dependencia y no como llamada suelta por el `base_url`: la URL
+    local se arma con el host de **este** request, así que los siete puntos que
+    emiten `image_url` necesitan el `Request` a mano. Inyectarlo una vez acá
+    evita que cada endpoint tenga que recibirlo y recordar de dónde sacar la base.
+    """
+    base_url = str(request.base_url)
+
+    def resolve(sku: str, stored_url: Optional[str]) -> Optional[str]:
+        return resolve_image_url(sku, stored_url, tenant_id, base_url)
+
+    return resolve

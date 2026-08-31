@@ -48,7 +48,16 @@ class Item(Base, UUIDPKMixin, TenantScopedMixin, TimestampMixin, SyncMixin):
     # recalcula `current_price` con la misma fórmula del catálogo (D-45/D-46).
     base_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
 
-    # Ciclo de vida de la unidad (D-41): 'disponible' | 'vendido' | 'reservado' |
-    # 'de_baja'. Se valida en Pydantic (ItemStatus) y con un CHECK acá —mismo
+    # Ciclo de vida de la unidad (D-41): 'available' | 'sold' | 'reserved' |
+    # 'written_off'. Se valida en Pydantic (ItemStatus) y con un CHECK acá —mismo
     # patrón que `Location.type`— porque el ORM no impone el enum por sí solo.
-    status: Mapped[str] = mapped_column(String, nullable=False, default="disponible")
+    # Los valores estaban en español hasta la migración 0012 (D-63).
+    status: Mapped[str] = mapped_column(String, nullable=False, default="available")
+
+    #  Etiqueta de lote de importación (A-30, mismo criterio que
+    #  `Reference.import_batch_id`, D-73) — habilita deshacer un lote entero.
+    #  Un import de Productos crea una fila por unidad (D-41), así que el lote
+    #  que agrupa esta columna suele ser mucho más grande que el de Referencias.
+    import_batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )

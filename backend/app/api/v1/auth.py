@@ -3,7 +3,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    hash_password,
+    needs_rehash,
+    verify_password,
+)
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, Token, UserCreate, UserRead
@@ -49,6 +54,17 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuario inactivo")
+
+    #  Migración silenciosa de hashes viejos. Argon2 guarda sus parámetros
+    #  dentro del hash, así que una cuenta creada con la configuración anterior
+    #  se seguiría verificando con ella —y pagando su latencia— por siempre.
+    #  Este es el único punto del sistema donde la contraseña en claro está
+    #  disponible para volver a derivar el hash, así que la migración va acá y
+    #  no en un script aparte. Va **después** de validar credenciales y estado,
+    #  para no reescribir nada de un login que igual va a ser rechazado.
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(payload.password)
+        db.commit()
 
     token = create_access_token(user_id=user.id, tenant_id=user.tenant_id)
     return LoginResponse(access_token=token, user=UserRead.model_validate(user))

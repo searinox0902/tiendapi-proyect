@@ -1,15 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue"
 import { useInfiniteScroll, watchDebounced } from "@vueuse/core"
-import { IconPhoto, IconPlus } from "@tabler/icons-vue"
+import {
+  IconDownload,
+  IconFileSpreadsheet,
+  IconFileUpload,
+  IconJson,
+  IconMarkdown,
+  IconPhoto,
+  IconPlus,
+} from "@tabler/icons-vue"
+import { Moon, Sun } from "@lucide/vue"
 import { toast } from "vue-sonner"
 import { useRouter } from "vue-router"
 
 import AppSidebar from "@/components/AppSidebar.vue"
+import ModuleNavSelect from "@/components/ModuleNavSelect.vue"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import ReferenceSearchInput from "@/components/ReferenceSearchInput.vue"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -21,10 +33,16 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
+import { isDark } from "@/composables/useTheme"
 import { formatCurrency, formatPercentage, toDecimal } from "@/lib/money"
 import { useItemsStore } from "@/stores/items"
 import { useReferencesStore } from "@/stores/references"
+import { itemsApi } from "@/api/items/items.api"
+import { downloadBlob } from "@/lib/download"
 import type { IItemStockFilters, TStockSort, TStockStatus } from "@/api/items/items.types"
+import type { TExportFormat } from "@/api/references/references.types"
+import ImportProductsDialog from "./ImportProductsDialog.vue"
 
 const router = useRouter()
 
@@ -42,8 +60,14 @@ const store = useItemsStore()
 const referencesStore = useReferencesStore()
 
 const filters = reactive({
-  sku: "",
-  title: "",
+  /**
+   * Un solo campo para código **y** nombre (D-91). Reemplaza a los filtros
+   * `sku` y `title` separados, que el backend cruzaba con **AND**: se podía
+   * pedir "sku contiene FRE Y nombre contiene pastilla". Ahora usa `search`,
+   * que es **OR** — el mismo parámetro que la caja usa desde antes, porque
+   * quien busca un repuesto recuerda el código o el nombre, no los dos.
+   */
+  search: "",
   brand: "",
   category: ALL_CATEGORIES,
   /** Lo selecciona el clic en las cards de resumen, no un input. */
@@ -54,8 +78,7 @@ const filters = reactive({
 /** Los filtros vacíos se omiten: el backend los trata como "sin filtro". */
 function currentParams(skip: number): IItemStockFilters {
   return {
-    sku: filters.sku.trim() || undefined,
-    title: filters.title.trim() || undefined,
+    search: filters.search.trim() || undefined,
     brand: filters.brand.trim() || undefined,
     category_id: filters.category === ALL_CATEGORIES ? undefined : filters.category,
     stock_status: filters.stockStatus,
@@ -137,16 +160,14 @@ useInfiniteScroll(window, loadMore, {
 })
 
 const hasFilters = computed(() =>
-  filters.sku !== ""
-  || filters.title !== ""
+  filters.search !== ""
   || filters.brand !== ""
   || filters.category !== ALL_CATEGORIES
   || filters.stockStatus !== "all",
 )
 
 function clearFilters() {
-  filters.sku = ""
-  filters.title = ""
+  filters.search = ""
   filters.brand = ""
   filters.category = ALL_CATEGORIES
   filters.stockStatus = "all"
@@ -158,6 +179,85 @@ function clearFilters() {
  */
 function formatPrice(value: string) {
   return formatCurrency(toDecimal(value))
+}
+
+const IMPORT_FORMATS = [
+  { value: "json", label: "JSON", hint: "El que exporta el propio sistema", icon: IconJson, accept: "application/json,.json" },
+  { value: "xlsx", label: "Excel", hint: "La plantilla .xlsx exportada", icon: IconFileSpreadsheet, accept: ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+] as const
+
+const EXPORT_FORMATS = [
+  //  Excel primero y con la etiqueta que importa: es el **mismo** archivo que
+  //  el importador acepta (D-74/D-92), o sea el que sirve para editar en una
+  //  hoja y volver a subir. JSON también vuelve a entrar; markdown es solo
+  //  para leer.
+  { value: "xlsx", label: "Excel", hint: "El que se puede editar y volver a importar", icon: IconFileSpreadsheet },
+  { value: "json", label: "JSON", hint: "Mismo contenido, para integraciones", icon: IconJson },
+  { value: "markdown", label: "Markdown", hint: "Tabla para leer o pegar (.md)", icon: IconMarkdown },
+] as const
+
+const exportOpen = ref(false)
+const isExporting = ref(false)
+/** Arranca en "todo": es lo que la gente espera de un botón que dice Exportar. */
+const exportScope = ref<"all" | "filtered">("all")
+
+/**
+ * Filtros que viajan al exportar "lo filtrado".
+ *
+ * No incluye `sort`: el orden de la grilla es de presentación y el archivo
+ * sale siempre por SKU, que es como se busca una fila en una hoja de cálculo.
+ */
+function exportFilters(): IItemStockFilters {
+  return {
+    search: filters.search.trim() || undefined,
+    brand: filters.brand.trim() || undefined,
+    category_id: filters.category === ALL_CATEGORIES ? undefined : filters.category,
+    stock_status: filters.stockStatus,
+  }
+}
+
+async function downloadExport(format: TExportFormat) {
+  if (isExporting.value) {
+    return
+  }
+  isExporting.value = true
+  try {
+    //  Se mandan los mismos filtros que la grilla, y el backend los aplica con
+    //  las mismas condiciones (`items.py:_stock_conditions`): el archivo no
+    //  puede discrepar de lo que se está viendo en pantalla.
+    const { data, headers } = await itemsApi.exportProducts(
+      format,
+      exportScope.value === "filtered" ? exportFilters() : {},
+    )
+    //  El nombre lo decide el backend (lleva la fecha). El respaldo local entra
+    //  solo si `Content-Disposition` no viajó.
+    downloadBlob(data, headers, `productos.${format === "markdown" ? "md" : format}`)
+    exportOpen.value = false
+    toast.success("Existencias exportadas", { position: "bottom-center" })
+  } catch (error) {
+    console.error("Export products failed:", error)
+    toast.error("No se pudieron exportar las existencias", { position: "bottom-center" })
+  } finally {
+    isExporting.value = false
+  }
+}
+
+const importOpen = ref(false)
+const importMenuOpen = ref(false)
+const importDialogRef = ref<InstanceType<typeof ImportProductsDialog> | null>(null)
+
+function pickImportFile(option: (typeof IMPORT_FORMATS)[number]) {
+  importMenuOpen.value = false
+  importDialogRef.value?.pickFile(option.accept)
+}
+
+/**
+ * El inventario cambió por fuera de la grilla. Se recarga desde cero —y no se
+ * hace un append— porque una importación puede crear productos nuevos que
+ * caen en cualquier página del orden actual, no al final.
+ */
+function onImported() {
+  load()
 }
 
 function addItems() {
@@ -200,9 +300,118 @@ onMounted(() => {
           <div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
             <SidebarTrigger class="-ml-1" />
             <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
-            <h1 class="text-base font-medium">
-              Productos
-            </h1>
+            <ModuleNavSelect current="items" />
+            <div class="ml-auto flex items-center gap-2">
+              <Popover v-model:open="importMenuOpen">
+                <PopoverTrigger as-child>
+                  <Button variant="outline" size="sm" class="gap-1.5">
+                    <IconFileUpload class="size-4" />
+                    Importar
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" class="w-64">
+                  <div class="grid gap-1">
+                    <p class="px-2 py-1.5 text-sm font-medium">
+                      Importar existencias
+                    </p>
+                    <Button
+                      v-for="option in IMPORT_FORMATS"
+                      :key="option.value"
+                      variant="ghost"
+                      class="h-auto w-full justify-start gap-3 whitespace-normal px-2 py-2"
+                      @click="pickImportFile(option)"
+                    >
+                      <component :is="option.icon" class="size-4 shrink-0 text-brand-icon" />
+                      <span class="grid min-w-0 gap-0.5 text-left">
+                        <span class="text-sm font-medium">{{ option.label }}</span>
+                        <span class="text-xs font-normal text-muted-foreground">{{ option.hint }}</span>
+                      </span>
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover v-model:open="exportOpen">
+                <PopoverTrigger as-child>
+                  <Button variant="outline" size="sm" class="gap-1.5">
+                    <IconDownload class="size-4" />
+                    Exportar
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="w-80">
+                  <div class="grid gap-4">
+                    <div class="grid gap-1">
+                      <p class="text-sm font-medium">
+                        Exportar existencias
+                      </p>
+                      <p class="text-xs text-muted-foreground">
+                        Una fila por grupo de unidades iguales. Sin existencias
+                        igual se descarga, con las columnas listas para usar de
+                        plantilla.
+                      </p>
+                    </div>
+
+                    <!--
+                      Alcance visible y no implícito, mismo criterio que en
+                      Referencias: sin esto es imposible saber si el archivo
+                      trae el inventario entero o solo lo filtrado, y el error
+                      se descubre tarde.
+                    -->
+                    <div class="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        :aria-pressed="exportScope === 'all'"
+                        class="rounded-md border px-3 py-2 text-left transition-colors"
+                        :class="exportScope === 'all'
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'"
+                        @click="exportScope = 'all'"
+                      >
+                        <span class="block text-xs text-muted-foreground">Todo</span>
+                        <span class="block text-sm font-medium">Inventario completo</span>
+                      </button>
+                      <button
+                        type="button"
+                        :aria-pressed="exportScope === 'filtered'"
+                        :disabled="!hasFilters"
+                        class="rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        :class="exportScope === 'filtered'
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'"
+                        @click="exportScope = 'filtered'"
+                      >
+                        <span class="block text-xs text-muted-foreground">Filtrado</span>
+                        <span class="block text-sm font-medium tabular-nums">
+                          {{ store.total }} {{ store.total === 1 ? "producto" : "productos" }}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div class="grid gap-1">
+                      <Button
+                        v-for="option in EXPORT_FORMATS"
+                        :key="option.value"
+                        variant="ghost"
+                        class="h-auto w-full justify-start gap-3 whitespace-normal px-2 py-2"
+                        :disabled="isExporting"
+                        @click="downloadExport(option.value)"
+                      >
+                        <component :is="option.icon" class="size-4 shrink-0 text-brand-icon" />
+                        <span class="grid min-w-0 gap-0.5 text-left">
+                          <span class="text-sm font-medium">{{ option.label }}</span>
+                          <span class="text-xs font-normal text-muted-foreground">{{ option.hint }}</span>
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Separator orientation="vertical" class="data-[orientation=vertical]:h-4" />
+              <Sun class="size-4 text-muted-foreground" />
+              <Switch v-model="isDark" aria-label="Cambiar a tema oscuro" />
+              <Moon class="size-4 text-muted-foreground" />
+            </div>
           </div>
         </header>
 
@@ -311,7 +520,7 @@ onMounted(() => {
                 `title`.
               -->
               <p
-                class="truncate text-xl font-bold tabular-nums text-primary"
+                class="truncate text-xl font-bold tabular-nums text-brand-icon"
                 :title="formatPrice(store.summary.total_cost)"
               >
                 {{ formatPrice(store.summary.total_cost) }}
@@ -343,14 +552,18 @@ onMounted(() => {
         <!-- Filtros -->
         <div class="flex items-center gap-4">
           <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
-            <div class="grid w-full gap-2 md:max-w-44">
-              <Label for="filter-sku">SKU</Label>
-              <Input id="filter-sku" v-model="filters.sku" placeholder="FRE-0001" />
-            </div>
-
-            <div class="grid w-full gap-2 md:max-w-64">
-              <Label for="filter-title">Nombre</Label>
-              <Input id="filter-title" v-model="filters.title" placeholder="Pastillas, bujía…" />
+            <div class="grid w-full gap-2 md:max-w-72">
+              <Label for="filter-search">Código o nombre</Label>
+              <!-- Patrón de autocompletado contra el servidor (D-91): el mismo
+                   componente que el alta de Referencia. Elegir una sugerencia
+                   deja su SKU en el campo, o sea acota la grilla a esa pieza. -->
+              <ReferenceSearchInput
+                id="filter-search"
+                v-model="filters.search"
+                placeholder="FRE-0001, pastillas, bujía…"
+                hint="Coincidencias en tu catálogo"
+                empty-hint="Tu catálogo — escribí un código o un nombre"
+              />
             </div>
 
             <div class="grid w-full gap-2 md:max-w-44">
@@ -540,5 +753,7 @@ onMounted(() => {
         </p>
       </div>
     </SidebarInset>
+
+    <ImportProductsDialog ref="importDialogRef" v-model:open="importOpen" @imported="onImported" />
   </SidebarProvider>
 </template>

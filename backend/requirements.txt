@@ -10,3 +10,12 @@ python-dotenv>=1.0,<2.0
 pyjwt>=2.9,<3.0
 argon2-cffi>=23.1,<26.0
 python-multipart>=0.0.9,<1.0
+# Exportación de catálogo a .xlsx (D-73). Va en el backend y no en el frontend
+# a propósito: el bundle del cliente viaja dentro del instalador Tauri
+# (D-29/D-31) y las librerías JS de xlsx pesan o están sin mantener.
+openpyxl>=3.1,<4.0
+# PDF por factura del paquete de Facturación (D-78). Python puro a propósito:
+# WeasyPrint habría reusado el HTML del documento Vue, pero exige cairo/pango/
+# gdk-pixbuf — libs del sistema que engordan la imagen y son las que más se
+# rompen en Windows, la plataforma objetivo del instalador (D-29).
+fpdf2>=2.7,<3.0

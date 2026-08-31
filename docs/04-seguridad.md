@@ -12,6 +12,16 @@ Tres reglas guía:
 2. **Cifrar en reposo y firmar la integridad:** el cifrado impide leer/editar casualmente; las firmas permiten detectar cualquier cambio.
 3. **El servidor manda:** cualquier discrepancia detectada al reconectar se corrige contra el servidor.
 
+### 1.1 Hash de contraseñas — Argon2id (D-82)
+
+Las contraseñas se guardan con **Argon2id**, en la configuración **mínima recomendada por OWASP**: `m=19 MiB, t=2, p=1` ([`backend/app/core/security.py`](../backend/app/core/security.py)).
+
+Se bajó desde el default de `argon2-cffi` (64 MiB, t=3, p=4) por una queja de latencia real en el login, **medida antes de tocar nada**: el default daba mediana **286 ms con picos de 1683 ms** dentro del contenedor; la configuración actual da **42 ms**. El pico venía sobre todo de `parallelism=4` compitiendo por CPU — con `p=1` el tiempo además deja de variar.
+
+⚠️ **Es el piso de lo aceptable, no un punto medio.** Bajar más sale de la recomendación. Argon2 es lento *a propósito*: es lo que encarece forzar las contraseñas si alguien se lleva la base — escenario nada teórico acá, porque el respaldo del proyecto (D-77) sale **sin cifrar** mientras SQLCipher (§2, D-06) no esté implementado. Si se quiere subir la exigencia, el candidato es la config *estándar* de OWASP (46 MiB, t=1, p=1), medida en 139 ms.
+
+**Los hashes viejos se migran solos.** Argon2 guarda sus parámetros dentro del propio hash, así que una cuenta creada con la configuración anterior seguiría verificándose —y pagando su latencia— para siempre. `POST /auth/login` llama a `needs_rehash()` y reescribe el hash tras un login **correcto**, que es el único momento en que la contraseña en claro está disponible para volver a derivarlo. Verificado: el hash de la cuenta demo pasó de `$argon2id$v=19$m=65536,t=3,p=4$…` a `$argon2id$v=19$m=19456,t=2,p=1$…` en el primer login, y **no** se reescribe en un login fallido.
+
 ## 2. Integridad y cifrado de la BBDD local
 
 SQLite por defecto es un archivo plano editable con cualquier visor. Se cifra con **SQLCipher (AES-256, cifrado transparente de toda la base)**, accesible desde Rust/Tauri → **cifrado de base completa**, no solo campos sueltos.

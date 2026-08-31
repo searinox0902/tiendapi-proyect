@@ -31,6 +31,8 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  /* Tinta del tema sobre superficies claras — ver `--brand-icon` en los temas. */
+  --color-brand-icon: var(--brand-icon);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -56,7 +58,13 @@
 
 /*
   Sistema de color — regla 90 / 7 / 3 (docs/09-diseno-ui-ux.md, D-16).
-  --primary = #9B44C2, --secondary = #040404 (valores de Figma).
+  --secondary = #040404 (valor de Figma).
+
+  Acá viven solo los tokens **neutros**, los que no cambian con el tema de
+  color: superficies, texto, bordes y destructivo. Todo lo que deriva del color
+  primario (primary, accent, ring, charts y sus equivalentes de sidebar) vive
+  más abajo, en los bloques por tema (D-80) — el violeta #9B44C2 sigue siendo
+  el de por defecto y sus valores son idénticos a los de antes.
 */
 :root {
   --radius: 0.625rem;
@@ -67,34 +75,18 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  --primary: oklch(0.556 0.197 313.6);
-  --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.107 0 0);
   --secondary-foreground: oklch(0.985 0 0);
 
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.94 0.03 313.6);
-  --accent-foreground: oklch(0.35 0.15 313.6);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.556 0.197 313.6);
-
-  --chart-1: oklch(0.556 0.197 313.6);
-  --chart-2: oklch(0.65 0.15 313.6);
-  --chart-3: oklch(0.4 0.12 313.6);
-  --chart-4: oklch(0.75 0.08 313.6);
-  --chart-5: oklch(0.3 0.06 313.6);
 
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.556 0.197 313.6);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.03 313.6);
-  --sidebar-accent-foreground: oklch(0.35 0.15 313.6);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.556 0.197 313.6);
 }
 
 .dark {
@@ -105,34 +97,322 @@
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
 
-  --primary: oklch(0.65 0.19 313.6);
-  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
 
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.3 0.08 313.6);
-  --accent-foreground: oklch(0.9 0.05 313.6);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.19 313.6);
 
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+}
+
+/*
+  ⚠️ El `--accent` oscuro (neutro, sin tinte del primario) NO puede vivir en el
+  bloque `.dark` de arriba, aunque sea igual para los seis temas.
+
+  Motivo, y es un bug de cascada que ya se probó: `.dark` y `[data-theme="x"]`
+  tienen la MISMA especificidad (0,1,0), y los bloques de tema claro van
+  después en el archivo. Con el accent declarado arriba, en modo oscuro ganaba
+  el del tema claro —`oklch(0.94 …)`, casi blanco— y los hover quedaban
+  encandilando sobre fondo negro. Declarado en los bloques oscuros de abajo, o
+  gana por venir después (`.dark` suelto) o por especificidad
+  (`.dark[data-theme="x"]`, 0,2,0). Si algún día mueves estos tokens, revisa el
+  orden del archivo antes.
+*/
+
+/*
+  ===========================================================================
+  Temas de color (D-80) — se elige en Configuraciones y se aplica como
+  `data-theme` en <html>, junto a la clase `.dark` del modo. Son dos ejes
+  independientes: el tema decide el COLOR, el switch decide claro/oscuro.
+
+  **Estos valores están generados, no escritos a mano**, y cada uno se
+  verificó antes de entrar acá:
+
+  - **El chroma va recortado al gamut sRGB real de cada hue.** No se puede
+    reusar el 0.197 del violeta para todos: a esa misma luminosidad el naranja
+    tope en 0.125 y el verde menta en 0.115, y pasarse hace que el navegador
+    recorte a un color sucio que nadie eligió. Por eso cada tema trae su propio
+    par L/C y no un simple cambio de número de hue.
+  - **`--primary-foreground` se eligió midiendo contraste, no por gusto.** Con
+    texto blanco encima, salmón da 2.52 y sol 2.66 — ambos reprueban WCAG AA.
+    Esos dos llevan texto oscuro (7.49 y 7.14). Los 12 pares tema×modo pasan
+    AA, el más bajo es 4.97.
+  - `--brand-hue` / `--brand-chroma` existen para las escalas derivadas que no
+    son tokens del sistema (la del calendario, en `DateRangePicker.vue`); sin
+    ellas ese componente se quedaría púrpura mientras todo lo demás cambia.
+
+  Si tocas un valor, no lo hagas a ojo: regenera con el script que calcula
+  gamut y contraste (ver D-80 en docs/07).
+  ===========================================================================
+*/
+:root,
+[data-theme="violeta"] {
+  --brand-hue: 313.6;
+  --brand-chroma: 0.197;
+  --primary: oklch(0.556 0.197 313.6);
+  --primary-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.5 0.197 313.6);
+  --ring: oklch(0.556 0.197 313.6);
+  --accent: oklch(0.94 0.03 313.6);
+  --accent-foreground: oklch(0.35 0.15 313.6);
+  --chart-1: oklch(0.556 0.197 313.6);
+  --chart-2: oklch(0.65 0.15 313.6);
+  --chart-3: oklch(0.4 0.12 313.6);
+  --chart-4: oklch(0.75 0.08 313.6);
+  --chart-5: oklch(0.3 0.06 313.6);
+  --sidebar-primary: oklch(0.556 0.197 313.6);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0.03 313.6);
+  --sidebar-accent-foreground: oklch(0.35 0.15 313.6);
+  --sidebar-ring: oklch(0.556 0.197 313.6);
+}
+
+[data-theme="carmesi"] {
+  --brand-hue: 25;
+  --brand-chroma: 0.18;
+  --primary: oklch(0.556 0.18 25);
+  --primary-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.5 0.18 25);
+  --ring: oklch(0.556 0.18 25);
+  --accent: oklch(0.94 0.03 25);
+  --accent-foreground: oklch(0.35 0.14 25);
+  --chart-1: oklch(0.556 0.18 25);
+  --chart-2: oklch(0.65 0.15 25);
+  --chart-3: oklch(0.4 0.12 25);
+  --chart-4: oklch(0.75 0.08 25);
+  --chart-5: oklch(0.3 0.06 25);
+  --sidebar-primary: oklch(0.556 0.18 25);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0.03 25);
+  --sidebar-accent-foreground: oklch(0.35 0.14 25);
+  --sidebar-ring: oklch(0.556 0.18 25);
+}
+
+[data-theme="sol"] {
+  --brand-hue: 65;
+  --brand-chroma: 0.155;
+  --primary: oklch(0.7 0.155 65);
+  --primary-foreground: oklch(0.145 0 0);
+  --brand-icon: oklch(0.5 0.11 65);
+  --ring: oklch(0.7 0.155 65);
+  --accent: oklch(0.94 0.03 65);
+  --accent-foreground: oklch(0.35 0.08 65);
+  --chart-1: oklch(0.7 0.155 65);
+  --chart-2: oklch(0.65 0.145 65);
+  --chart-3: oklch(0.4 0.09 65);
+  --chart-4: oklch(0.75 0.08 65);
+  --chart-5: oklch(0.3 0.06 65);
+  --sidebar-primary: oklch(0.7 0.155 65);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.94 0.03 65);
+  --sidebar-accent-foreground: oklch(0.35 0.08 65);
+  --sidebar-ring: oklch(0.7 0.155 65);
+}
+
+[data-theme="verde"] {
+  --brand-hue: 165;
+  --brand-chroma: 0.13;
+  --primary: oklch(0.62 0.13 165);
+  --primary-foreground: oklch(0.145 0 0);
+  --brand-icon: oklch(0.5 0.105 165);
+  --ring: oklch(0.62 0.13 165);
+  --accent: oklch(0.94 0.03 165);
+  --accent-foreground: oklch(0.35 0.075 165);
+  --chart-1: oklch(0.62 0.13 165);
+  --chart-2: oklch(0.65 0.135 165);
+  --chart-3: oklch(0.4 0.085 165);
+  --chart-4: oklch(0.75 0.08 165);
+  --chart-5: oklch(0.3 0.06 165);
+  --sidebar-primary: oklch(0.62 0.13 165);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.94 0.03 165);
+  --sidebar-accent-foreground: oklch(0.35 0.075 165);
+  --sidebar-ring: oklch(0.62 0.13 165);
+}
+
+[data-theme="salmon"] {
+  --brand-hue: 35;
+  --brand-chroma: 0.16;
+  --primary: oklch(0.72 0.16 35);
+  --primary-foreground: oklch(0.145 0 0);
+  --brand-icon: oklch(0.5 0.16 35);
+  --ring: oklch(0.72 0.16 35);
+  --accent: oklch(0.94 0.03 35);
+  --accent-foreground: oklch(0.35 0.125 35);
+  --chart-1: oklch(0.72 0.16 35);
+  --chart-2: oklch(0.65 0.15 35);
+  --chart-3: oklch(0.4 0.12 35);
+  --chart-4: oklch(0.75 0.08 35);
+  --chart-5: oklch(0.3 0.06 35);
+  --sidebar-primary: oklch(0.72 0.16 35);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.94 0.03 35);
+  --sidebar-accent-foreground: oklch(0.35 0.125 35);
+  --sidebar-ring: oklch(0.72 0.16 35);
+}
+
+/*
+  Grafito es el único sin color: su rampa completa —accent y charts incluidos—
+  va en chroma 0. Aplicarle la rampa de los demás sobre hue 0 le daría acentos
+  rojizos, que es justo lo que este tema no es.
+*/
+[data-theme="grafito"] {
+  --brand-hue: 0;
+  --brand-chroma: 0;
+  --primary: oklch(0.2 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.2 0 0);
+  --ring: oklch(0.2 0 0);
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0.35 0 0);
+  --chart-1: oklch(0.2 0 0);
+  --chart-2: oklch(0.65 0 0);
+  --chart-3: oklch(0.4 0 0);
+  --chart-4: oklch(0.75 0 0);
+  --chart-5: oklch(0.3 0 0);
+  --sidebar-primary: oklch(0.2 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0 0);
+  --sidebar-accent-foreground: oklch(0.35 0 0);
+  --sidebar-ring: oklch(0.2 0 0);
+}
+
+/*
+  Modo oscuro por tema. Van después de los bloques claros a propósito: `.dark`
+  y `[data-theme="x"]` tienen la MISMA especificidad (0,1,0), así que el orden
+  del archivo es lo que decide — si estos subieran, el tema claro le ganaría al
+  oscuro y el modo oscuro dejaría de pintar el primario.
+*/
+.dark,
+.dark[data-theme="violeta"] {
+  --brand-chroma: 0.19;
+  --primary: oklch(0.65 0.19 313.6);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.65 0.19 313.6);
+  --ring: oklch(0.65 0.19 313.6);
   --chart-1: oklch(0.65 0.19 313.6);
   --chart-2: oklch(0.75 0.15 313.6);
   --chart-3: oklch(0.55 0.14 313.6);
   --chart-4: oklch(0.85 0.08 313.6);
   --chart-5: oklch(0.45 0.1 313.6);
-
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.65 0.19 313.6);
   --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.3 0.08 313.6);
-  --sidebar-accent-foreground: oklch(0.9 0.05 313.6);
-  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.65 0.19 313.6);
+}
+
+.dark[data-theme="carmesi"] {
+  --brand-chroma: 0.175;
+  --primary: oklch(0.65 0.175 25);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.65 0.175 25);
+  --ring: oklch(0.65 0.175 25);
+  --chart-1: oklch(0.65 0.175 25);
+  --chart-2: oklch(0.75 0.15 25);
+  --chart-3: oklch(0.55 0.14 25);
+  --chart-4: oklch(0.85 0.08 25);
+  --chart-5: oklch(0.45 0.1 25);
+  --sidebar-primary: oklch(0.65 0.175 25);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-ring: oklch(0.65 0.175 25);
+}
+
+.dark[data-theme="sol"] {
+  --brand-chroma: 0.165;
+  --primary: oklch(0.78 0.165 65);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.78 0.165 65);
+  --ring: oklch(0.78 0.165 65);
+  --chart-1: oklch(0.78 0.165 65);
+  --chart-2: oklch(0.75 0.15 65);
+  --chart-3: oklch(0.55 0.12 65);
+  --chart-4: oklch(0.85 0.08 65);
+  --chart-5: oklch(0.45 0.1 65);
+  --sidebar-primary: oklch(0.78 0.165 65);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-ring: oklch(0.78 0.165 65);
+}
+
+.dark[data-theme="verde"] {
+  --brand-chroma: 0.13;
+  --primary: oklch(0.72 0.13 165);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.72 0.13 165);
+  --ring: oklch(0.72 0.13 165);
+  --chart-1: oklch(0.72 0.13 165);
+  --chart-2: oklch(0.75 0.15 165);
+  --chart-3: oklch(0.55 0.115 165);
+  --chart-4: oklch(0.85 0.08 165);
+  --chart-5: oklch(0.45 0.095 165);
+  --sidebar-primary: oklch(0.72 0.13 165);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-ring: oklch(0.72 0.13 165);
+}
+
+.dark[data-theme="salmon"] {
+  --brand-chroma: 0.13;
+  --primary: oklch(0.78 0.13 35);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.78 0.13 35);
+  --ring: oklch(0.78 0.13 35);
+  --chart-1: oklch(0.78 0.13 35);
+  --chart-2: oklch(0.75 0.15 35);
+  --chart-3: oklch(0.55 0.14 35);
+  --chart-4: oklch(0.85 0.08 35);
+  --chart-5: oklch(0.45 0.1 35);
+  --sidebar-primary: oklch(0.78 0.13 35);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-ring: oklch(0.78 0.13 35);
+}
+
+/*
+  La inversión que pidió el dueño de producto: primario negro en claro, blanco
+  en oscuro. No es capricho de diseño — un primario negro (L=0.20) sobre el
+  fondo oscuro da contraste 1.45, o sea invisible. Invertido a L=0.95 da 17.10.
+*/
+.dark[data-theme="grafito"] {
+  --brand-chroma: 0;
+  --primary: oklch(0.95 0 0);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --brand-icon: oklch(0.95 0 0);
+  --ring: oklch(0.95 0 0);
+  --chart-1: oklch(0.95 0 0);
+  --chart-2: oklch(0.75 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.85 0 0);
+  --chart-5: oklch(0.45 0 0);
+  --sidebar-primary: oklch(0.95 0 0);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-ring: oklch(0.95 0 0);
 }
 
 @layer base {
@@ -155,6 +435,26 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  /* Scrollbar delgado, coherente con el tema claro/oscuro (usa tokens de :root / .dark). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
   }
 }
 /*

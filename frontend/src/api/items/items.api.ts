@@ -8,6 +8,9 @@ import type {
   IItemStockFilters,
   IItemStockSummary,
   IItemUpdatePayload,
+  IProductImportPreview,
+  IProductImportResult,
+  IProductImportUndoResult,
 } from "./items.types";
 
 export const itemsApi = {
@@ -52,5 +55,52 @@ export const itemsApi = {
   /** Baja definitiva. El backend rechaza (409) si la unidad ya está facturada. */
   deleteItem(itemId: string) {
     return http.delete<void>(`/items/${itemId}`);
+  },
+
+  /**
+   * Existencias como archivo descargable, y de paso la **plantilla** del
+   * importador: un inventario vacío igual devuelve las columnas (D-73).
+   * Una fila por grupo de unidades idénticas, no una por unidad.
+   */
+  exportProducts(format: "json" | "xlsx" | "markdown", params: IItemStockFilters = {}) {
+    return http.get<Blob>("/items/export", {
+      params: { format, ...params },
+      responseType: "blob",
+    });
+  },
+
+  /**
+   * No escribe nada — cuenta qué haría `importProducts` con este mismo
+   * archivo. Las cifras salen del mismo planificador que ejecuta el commit,
+   * así que lo que promete es literalmente lo que va a pasar (A-30).
+   *
+   * El cliente no parsea nada: sube el archivo tal cual y el backend detecta
+   * JSON vs. .xlsx — así el bundle del instalador Tauri no carga ninguna
+   * librería de Excel (D-29/D-31).
+   */
+  previewProductImport(file: File, createMissing = true) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return http.post<IProductImportPreview>("/items/import/preview", formData, {
+      params: { create_missing: createMissing },
+    });
+  },
+
+  /**
+   * `createMissing` decide qué pasa con un SKU que no está en el catálogo:
+   * `true` (default) crea la Referencia y le cuelga las unidades en la misma
+   * pasada; `false` marca esas filas como inválidas.
+   */
+  importProducts(file: File, createMissing = true) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return http.post<IProductImportResult>("/items/import", formData, {
+      params: { create_missing: createMissing },
+    });
+  },
+
+  /** Deshace el lote entero: unidades y el catálogo que ese archivo creó al pasar. */
+  undoProductImportBatch(batchId: string) {
+    return http.delete<IProductImportUndoResult>(`/items/import/${batchId}`);
   },
 };

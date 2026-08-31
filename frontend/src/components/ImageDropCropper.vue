@@ -134,11 +134,11 @@ onBeforeUnmount(() => {
     >
       <template v-if="resultUrl">
         <img :src="resultUrl" alt="" class="size-24 rounded-md object-cover">
-        <span class="text-sm text-primary underline">Cambiar imagen</span>
+        <span class="text-sm text-brand-icon underline">Cambiar imagen</span>
       </template>
       <template v-else-if="initialPreviewUrl">
         <img :src="initialPreviewUrl" alt="" class="size-24 rounded-md object-cover">
-        <span class="text-sm text-primary underline">Cambiar imagen</span>
+        <span class="text-sm text-brand-icon underline">Cambiar imagen</span>
       </template>
       <template v-else>
         <IconUpload class="size-6 text-muted-foreground" />

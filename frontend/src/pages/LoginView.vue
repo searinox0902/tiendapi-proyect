@@ -1,5 +1,8 @@
 <template>
-  <div class="loginContainer grid min-h-screen place-items-start items-center px-6 py-12">
+  <div
+    class="loginContainer grid min-h-screen place-items-start items-center px-6 py-12"
+    :style="businessImageStyle"
+  >
     <div class="w-full ml-44 max-w-md">
       <div class="mb-12 text-center">
         <span
@@ -63,6 +66,7 @@
 </template>
 
 <script setup lang="ts">
+  import { computed, onMounted } from "vue";
   import { useForm } from "vee-validate";
   import { toTypedSchema } from "@vee-validate/zod";
   import { Button } from "@/components/ui/button";
@@ -78,6 +82,8 @@
   import { isAxiosError } from "axios";
   import { loginSchema } from "@/api/auth/auth.schema";
   import { useAuthStore } from "@/stores/auth"
+  import { readLoginImageUrl, rememberLoginImage } from "@/lib/branding"
+  import { brandingApi } from "@/api/branding/branding.api"
   import { Spinner } from '@/components/ui/spinner'
   import { toast } from 'vue-sonner'
   import { useRouter } from "vue-router";
@@ -85,6 +91,26 @@
 
   const router = useRouter();
   const authStore = useAuthStore();
+
+  onMounted(() => {
+    import("@/pages/dashboard/DashboardView.vue")
+  });
+
+  /**
+   * Fondo del login: la imagen del negocio si esta instalación ya la conoce.
+   *
+   * Se lee de `localStorage` y no del backend porque esta pantalla se dibuja
+   * **antes** de autenticarse: sin token no hay `tenant_id`, y el servidor no
+   * puede saber de qué negocio es una petición anónima. Ver `@/lib/branding`.
+   *
+   * Devuelve `{}` cuando no hay ninguna, y ahí manda la regla de la hoja de
+   * estilos (el fondo por defecto): una máquina recién instalada no tiene por
+   * qué mostrar una pantalla en blanco.
+   */
+  const businessImageStyle = computed(() => {
+    const url = readLoginImageUrl();
+    return url ? { backgroundImage: `url("${url}")` } : {};
+  });
 
   const REMEMBERED_EMAIL_KEY = "tiendapi.rememberedEmail";
   const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
@@ -102,14 +128,6 @@
     resetForm();
   }
 
-  /**
-   * 401 es la única condición que se muestra como "usuario o contraseña
-   * incorrectos" — es la única a la que el backend le da ese significado
-   * (`app/api/v1/auth.py::login`). Cualquier otra causa (servidor caído,
-   * 403 usuario inactivo, 5xx, error de red) mostraba el mismo mensaje
-   * genérico y ocultaba lo que de verdad pasó; acá se arma un mensaje con
-   * el detalle técnico que el backend/axios ya trae, sin inventar texto.
-   */
   function describeLoginError(error: unknown): string {
     if (isAxiosError(error)) {
       if (!error.response) {
@@ -135,6 +153,15 @@
 
     try {
       await authStore.login(credentials);
+
+      //  Ya hay token: se aprovecha para dejar la imagen del negocio
+      //  actualizada de cara al **próximo** inicio de sesión. Va sin `await` y
+      //  con el error tragado a propósito — es una comodidad visual, y hacer
+      //  esperar (o peor, fallar) un login por ella sería desproporcionado.
+      brandingApi
+        .getBranding()
+        .then(({ data }) => rememberLoginImage(data.login_image_url))
+        .catch(() => {});
 
       if (saveSession) {
         localStorage.setItem(REMEMBERED_EMAIL_KEY, credentials.email);
@@ -164,6 +191,13 @@
 </script>
 
 <style scoped>
+  /*
+    El `background-image` por defecto se queda acá; cuando el negocio subió su
+    propia imagen, `businessImageStyle` la sobreescribe inline (la regla inline
+    gana sobre la de la hoja, sin necesidad de `!important`). Encuadre `contain`
+    en los dos casos: la imagen del negocio puede tener cualquier proporción y
+    `cover` la recortaría por donde caiga.
+  */
   .loginContainer {
     background-image: url('@/assets/bg_login.png');
     background-size: contain;

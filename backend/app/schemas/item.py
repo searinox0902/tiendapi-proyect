@@ -8,12 +8,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ItemStatus(str, Enum):
-    """Ciclo de vida de la unidad física — docs/03-modelo-datos.md §1.3 (D-41)."""
+    """
+    Ciclo de vida de la unidad física — docs/03-modelo-datos.md §1.3 (D-41).
 
-    DISPONIBLE = "disponible"
-    VENDIDO = "vendido"
-    RESERVADO = "reservado"
-    DE_BAJA = "de_baja"
+    Valores en inglés desde la migración `0012` (D-63); antes eran
+    `disponible|vendido|reservado|de_baja`. `WRITTEN_OFF` es la baja manual
+    (dañada, extraviada): un descarte de la unidad, no una desactivación
+    temporal — de ahí el término contable y no `inactive`.
+    """
+
+    AVAILABLE = "available"
+    SOLD = "sold"
+    RESERVED = "reserved"
+    WRITTEN_OFF = "written_off"
 
 
 class ItemBase(BaseModel):
@@ -28,7 +35,7 @@ class ItemBase(BaseModel):
 
 class ItemCreate(ItemBase):
     #  `status`, `iva_percentage` y `provider_price` NO se exponen acá a
-    #  propósito: toda existencia nueva nace 'disponible' y sin overrides —
+    #  propósito: toda existencia nueva nace 'available' y sin overrides —
     #  hereda el IVA/costo vigentes de catálogo (migración 0007) hasta que
     #  alguien la edite con `PATCH /items/{id}`.
     pass
@@ -107,27 +114,32 @@ class ItemStockSummaryRead(BaseModel):
     low_stock_references: int
     #  Umbral usado para `low_stock_references`, para que la UI no lo hardcodee.
     low_stock_threshold: int
-    #  Capital inmovilizado: Σ(precio_proveedor × unidades). Lo que hay en plata
+    #  Capital inmovilizado: Σ(provider_price × unidades). Lo que hay en plata
     #  parada en las estanterías.
     total_cost: Decimal
-    #  Σ(precio_venta × unidades) — lo que entraría si se vendiera todo.
+    #  Σ(sale_price × unidades) — lo que entraría si se vendiera todo.
     total_sale_value: Decimal
     #  `total_sale_value - total_cost`.
     potential_margin: Decimal
     #  Margen bruto sobre la venta, en %. `0` si no hay valor de venta.
     margin_percentage: Decimal
-    #  Unidades cuya Referencia no tiene `precio_proveedor` cargado (D-52, captura
+    #  Unidades cuya Referencia no tiene `provider_price` cargado (D-52, captura
     #  manual). Sin esto, `total_cost` se leería como completo cuando no lo es.
     units_without_cost: int
 
 
-class ItemExistenceRead(BaseModel):
+class ItemStockUnitRead(BaseModel):
     """
     Una unidad física concreta en la pantalla de aterrizaje del Producto.
 
     A diferencia de `ItemStockRead` —que agrega y cuenta— acá cada fila ES un
     `Item` (D-41), con su identidad propia: es el `item_id` que el cajero teclea
     para vender o descontar esta unidad y no otra (A-22).
+
+    Se llamaba `ItemExistenceRead` hasta D-64: "existence" es un calco de
+    "existencias" que en inglés significa "el hecho de existir", no stock.
+    `stock_unit` y no `unit` a secas para no chocar con `ItemStockRead.units`,
+    que es un **conteo**, no una fila.
 
     `sale_price` sale de `Item.current_price` y no de la fórmula del catálogo:
     justamente el punto de que cada unidad tenga su precio es poder descontar
@@ -196,7 +208,7 @@ class ItemDetailRead(BaseModel):
 
     summary: ProductSummaryRead
     totals: ItemDetailTotals
-    existences: list[ItemExistenceRead]
+    stock_units: list[ItemStockUnitRead]
 
 
 class ItemStockRead(BaseModel):
@@ -220,7 +232,106 @@ class ItemStockRead(BaseModel):
     brand: Optional[str] = None
     image_url: Optional[str] = None
     category_id: Optional[uuid.UUID] = None
-    #  Unidades en existencia = cuántas filas `Item` apuntan a esta Referencia.
+    #  Unidades en existencia = cuántas filas `Item` apuntan a esta Referencia
+    #  con `status='available'` (ver `_available_join`).
     units: int
     #  Precio de venta con IVA del catálogo (D-45/D-46). Ver `_sale_price` en el router.
     sale_price: Decimal
+    #  Base e IVA del catálogo. Viajan para que la caja registradora arme la
+    #  línea de venta (base, IVA y descuento) con una sola consulta: sin esto
+    #  tendría que pedir la Referencia aparte para cada producto que el cajero
+    #  toca, y es justo el momento en que no puede esperar.
+    base_price: Decimal
+    iva_percentage: Decimal
+
+
+class ProductImportInvalidRow(BaseModel):
+    """Fila que no se pudo aplicar — no bloquea las demás (D-73)."""
+
+    index: int
+    sku: Optional[str] = None
+    reason: str
+
+
+class ProductImportVariant(BaseModel):
+    """
+    Variante que la importación va a crear (A-30 + D-90).
+
+    Se lista con nombre y código asignado **antes** de confirmar: la creación es
+    automática (decisión del dueño de producto), pero no puede ser invisible —
+    un archivo que escribe el mismo producto con dos nombres distintos crearía
+    dos fichas, y eso tiene que verse en la previsualización, no descubrirse
+    después en el catálogo.
+    """
+
+    base_sku: str
+    sku: str
+    title: str
+    units: int
+
+
+class ProductImportDiscrepancy(BaseModel):
+    """
+    Fila cuyo dato de catálogo no coincide con la Referencia que ya existe.
+
+    **No se aplica nada**: el archivo de existencias nunca edita el catálogo
+    (decisión del dueño de producto). Se reporta para que el usuario sepa que
+    su archivo dice otra cosa y decida corregir la Referencia por su cuenta.
+    """
+
+    sku: str
+    #  Etiquetas de los campos que difieren: marca, categoria, precio base…
+    fields: list[str]
+
+
+class ProductImportPreview(BaseModel):
+    """
+    Respuesta de `POST /items/import/preview` — no escribe nada.
+
+    Las cifras salen del **mismo planificador** que ejecuta el commit
+    (`app/imports/products.py:plan`), así que lo que se promete acá es
+    literalmente lo que va a pasar, incluso cuando el archivo repite un SKU.
+    """
+
+    total_rows: int
+    #  Titular de la pantalla: existencias que se van a crear (D-41: una fila
+    #  de `Item` por unidad). No es el número de filas del archivo.
+    units_total: int
+    #  Filas que se enganchan a una Referencia que ya existe.
+    matched_count: int
+    #  SKUs que no están en el catálogo y se van a crear como Referencia nueva.
+    new_references: list[str]
+    new_variants: list[ProductImportVariant]
+    invalid: list[ProductImportInvalidRow]
+    new_providers: list[str]
+    new_locations: list[str]
+    new_categories: list[str]
+    discrepancies: list[ProductImportDiscrepancy]
+    #  `None` para un archivo JSON — no tiene encabezados que detectar (D-74).
+    columns_detected: Optional[list[str]] = None
+    columns_missing: Optional[list[str]] = None
+    columns_ignored: Optional[list[str]] = None
+
+
+class ProductImportResult(BaseModel):
+    """Respuesta de `POST /items/import` — ya escribió en la BBDD."""
+
+    units_created: int
+    references_created: int
+    variants_created: int
+    invalid: int
+    #  `None` cuando no se creó ninguna unidad: no hay lote que deshacer.
+    batch_id: Optional[uuid.UUID] = None
+
+
+class ProductImportUndoResult(BaseModel):
+    """
+    Un lote de Productos puede haber creado unidades **y** catálogo, así que el
+    undo informa las dos cosas por separado.
+    """
+
+    units_deleted: int
+    references_deleted: int
+    #  Proveedores/Ubicaciones/Categorías que el archivo autocreó y que nadie
+    #  más está usando. Los que sí quedaron en uso se dejan y no bloquean.
+    directory_deleted: int

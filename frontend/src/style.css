@@ -415,6 +415,98 @@
   --sidebar-ring: oklch(0.95 0 0);
 }
 
+/*
+  ===========================================================================
+  Tokens de novedad — módulo de Nómina (docs/13-modulo-nomina.md, §7)
+  ===========================================================================
+
+  Los únicos colores semánticos del proyecto además de `--destructive`. Se
+  declaran acá, DESPUÉS de los bloques de tema, a propósito: los bloques
+  `[data-theme="x"]` no definen estos tokens, así que no hay colisión de
+  cascada como la documentada arriba para `--accent`.
+
+  Son **cuatro** y no nueve porque solo las novedades que **consumen días**
+  van al calendario. Horas extra y bonificaciones anotan el día sin quitarlo:
+  se dibujan como marcador neutro (`--novelty-marker`), no como franja, para
+  que "trabajó de más" nunca se lea igual que "faltó".
+
+  Saturación contenida a propósito (regla 90/7/3, D-16): el calendario está
+  vacío el 90% de los meses, y unas pocas franjas estridentes sobre fondo
+  blanco desequilibran la pantalla entera.
+
+  ⚠️ El color NUNCA es el único canal: la incapacidad además lleva trama
+  diagonal, y la duración se codifica como ancho de la franja. Ver §5 de
+  docs/09-diseno-ui-ux.md.
+*/
+:root {
+  --novelty-absence: oklch(0.61 0.16 27);
+  --novelty-sick-leave: oklch(0.72 0.13 70);
+  --novelty-vacation: oklch(0.64 0.11 172);
+  --novelty-leave: oklch(0.60 0.12 252);
+  --novelty-foreground: oklch(1 0 0);
+  --novelty-marker: oklch(0.556 0 0);
+
+  /*
+    Fondos de día: tinte, no color. Son contexto, no contenido.
+
+    El día **laborable** sí lleva tinte (gris muy tenue): marca el lienzo
+    "acá se trabaja". No dice que alguien haya trabajado —eso lo dice la
+    línea de continuidad—, solo distingue el día hábil establecido del que
+    no lo es. El no laborable queda aún más tenue, casi al nivel del papel.
+  */
+  --day-working: oklch(0.983 0 0);
+  --day-nonworking: oklch(0.995 0 0);
+  --day-holiday: oklch(0.995 0 0);
+
+  /*
+    Línea de continuidad, en tres estados. Ya no describe el **corte** sino el
+    **pago**: la pregunta que responde es "¿este día ya se liquidó?".
+
+    Por eso el primario se reserva para lo liquidado. Antes marcaba el corte
+    vigente —o sea, casi todo el mes— y eso reventaba la regla 90/7/3: el color
+    de acento pintado sobre el estado por defecto deja de ser acento. Con este
+    reparto el mes es gris y el morado aparece solo donde hubo plata de por
+    medio, que es lo que de verdad merece destacarse.
+  */
+  --period-line: var(--primary);
+  --period-line-settled: var(--primary);
+  --period-line-worked: oklch(0.62 0 0);
+  --period-line-upcoming: oklch(0.87 0 0);
+}
+
+.dark {
+  --novelty-absence: oklch(0.68 0.15 27);
+  --novelty-sick-leave: oklch(0.78 0.12 70);
+  --novelty-vacation: oklch(0.70 0.10 172);
+  --novelty-leave: oklch(0.67 0.11 252);
+  --novelty-foreground: oklch(0.16 0 0);
+  --novelty-marker: oklch(0.708 0 0);
+
+  --period-line-worked: oklch(0.58 0 0);
+  --period-line-upcoming: oklch(0.34 0 0);
+
+  --day-working: oklch(1 0 0 / 4%);
+  --day-nonworking: oklch(1 0 0 / 1%);
+  --day-holiday: oklch(1 0 0 / 1%);
+
+}
+
+@theme inline {
+  --color-novelty-absence: var(--novelty-absence);
+  --color-novelty-sick-leave: var(--novelty-sick-leave);
+  --color-novelty-vacation: var(--novelty-vacation);
+  --color-novelty-leave: var(--novelty-leave);
+  --color-novelty-foreground: var(--novelty-foreground);
+  --color-novelty-marker: var(--novelty-marker);
+  --color-day-working: var(--day-working);
+  --color-day-nonworking: var(--day-nonworking);
+  --color-day-holiday: var(--day-holiday);
+  --color-period-line: var(--period-line);
+  --color-period-line-settled: var(--period-line-settled);
+  --color-period-line-worked: var(--period-line-worked);
+  --color-period-line-upcoming: var(--period-line-upcoming);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

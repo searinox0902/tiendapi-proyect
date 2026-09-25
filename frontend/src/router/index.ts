@@ -103,6 +103,15 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
      {
+      // Nómina: el aterrizaje del módulo es el **calendario del mes**, no una
+      // tabla — la tabla liquida dos veces al mes, el calendario informa todos
+      // los días. Ver docs/13-modulo-nomina.md.
+      path: "/nomina",
+      name: "payroll",
+      component: () => import("@/pages/payroll/PayrollView.vue"),
+      meta: { requiresAuth: true },
+    },
+    {
       path: "/directorio",
       name: "directory",
       component: () => import("@/pages/directory/DirectoryView.vue"),

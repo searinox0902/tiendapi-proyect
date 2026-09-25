@@ -115,7 +115,13 @@ Docker local: GitHub provee el Postgres.
 
 ## 6. Empaquetado del instalador (Tauri)
 
-Envuelve el frontend **existente** como app instalable (D-29). No modifica el código Vue.
+> ⚠️ **Todavía no está construido.** Esta sección describe el plan, no lo que hay en
+> el repo: no existe `frontend/src-tauri/`, ni la dependencia `@tauri-apps/*`, ni los
+> scripts `tauri:dev` / `tauri:build`. La decisión (D-29 a D-31) sigue vigente y el
+> andamiaje es rutinario de crear; mientras tanto la app corre en el navegador con
+> `npm run dev`.
+
+Envolverá el frontend **existente** como app instalable (D-29). No modifica el código Vue.
 
 ### Preparar (una vez)
 

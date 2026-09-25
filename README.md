@@ -4,6 +4,9 @@ Software de gestión comercial (referencias, inventario y facturación) para pym
 
 > **Estado:** pre-MVP. Documentación en [`docs/`](docs/) (empieza por [docs/00-indice-maestro.md](docs/00-indice-maestro.md)). Fuentes originales en [`specs/`](specs/).
 
+> 🚀 **¿Primera vez con el repo?** [`ARRANQUE.md`](ARRANQUE.md) lo pone todo a correr en
+> cuatro comandos, con el usuario de acceso y la semilla del catálogo de repuestos.
+
 ## Estructura
 
 ```
@@ -71,11 +74,16 @@ uvicorn app.main:app --reload
 
 - API: http://localhost:8000 · Swagger: http://localhost:8000/docs · Health: http://localhost:8000/health
 
-> **Autenticación (F1):** los endpoints exigen un **token Bearer (JWT)**. Flujo: `POST /api/v1/auth/register` (crea negocio + propietario) → `POST /api/v1/auth/login` (devuelve `access_token`) → usar `Authorization: Bearer <token>`. El `tenant_id` se deriva del token (cierra A-12). Para datos de prueba: `python -m scripts.seed` crea `demo@tiendapi.co` / `demo1234`. Pendiente: firma HMAC/cadena de hash de facturas (F2).
+> **Autenticación (F1):** los endpoints exigen un **token Bearer (JWT)**. Flujo: `POST /api/v1/auth/register` (crea negocio + propietario) → `POST /api/v1/auth/login` (devuelve `access_token`) → usar `Authorization: Bearer <token>`. El `tenant_id` se deriva del token (cierra A-12). Para datos de prueba: `python -m scripts.seed` crea `demo@tiendapi.co` / `demo1234`, y
+`python -m scripts.seed_catalog` carga sobre ese negocio las **1.015 Referencias reales**
+de repuestos de moto (ver [`ARRANQUE.md`](ARRANQUE.md)). Pendiente: firma HMAC/cadena de hash de facturas (F2).
 
-### Empaquetar el instalador de escritorio (Tauri)
+### Empaquetar el instalador de escritorio (Tauri) — *pendiente*
 
-Requiere **Rust** (https://rustup.rs). Envuelve el frontend existente como `.exe` instalable; no toca el código Vue. Detalle en [docs/10](docs/10-infraestructura-dev-y-empaquetado.md), §6.
+⚠️ **Todavía no está construido:** no hay `frontend/src-tauri/` ni el script `tauri:build`.
+Los comandos de abajo son el plan (D-29 a D-31), no algo que funcione hoy. Envolverá el
+frontend existente como `.exe` instalable, sin tocar el código Vue. Detalle en
+[docs/10](docs/10-infraestructura-dev-y-empaquetado.md), §6.
 
 ```bash
 cd frontend
@@ -96,4 +104,4 @@ npm run tauri:build                        # genera el instalador NSIS
 | Migrar BBDD | `cd backend && alembic upgrade head` |
 | Correr la API (local) | `cd backend && uvicorn app.main:app --reload` |
 | Tests / lint del backend | `cd backend && pytest` · `ruff check .` |
-| Empaquetar instalador (Tauri) | `cd frontend && npm run tauri:build` |
+| Empaquetar instalador (Tauri) | ⚠️ pendiente — el andamiaje no está en el repo |

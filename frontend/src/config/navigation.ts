@@ -1,5 +1,6 @@
 import {
   IconAddressBook,
+  IconCalendar,
   IconCashRegister,
   IconDashboard,
   IconPackage,
@@ -47,6 +48,12 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: "Caja registradora", to: "pos", icon: IconCashRegister },
       { title: "Facturación", to: "invoices", icon: IconReceipt },
+    ],
+  },
+  {
+    label: "Personal",
+    items: [
+      { title: "Nómina", to: "payroll", icon: IconCalendar },
     ],
   },
   {

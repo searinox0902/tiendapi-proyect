@@ -1,6 +1,6 @@
 # 13 — Módulo de Nómina (mini-gestor)
 
-> **Contexto:** Diseño funcional y de flujos UX/UI del módulo de Nómina para pymes colombianas. Alcance deliberadamente acotado: **calcula, documenta y da visibilidad; no dispersa pagos ni transmite a la DIAN.** Decisiones registradas en [07](07-decisiones-y-puntos-abiertos.md) como **D-97 a D-109** y puntos abiertos **A-34 a A-42**.
+> **Contexto:** Diseño funcional y de flujos UX/UI del módulo de Nómina para pymes colombianas. Alcance deliberadamente acotado: **calcula, documenta y da visibilidad; no dispersa pagos ni transmite a la DIAN.** Decisiones registradas en [07](07-decisiones-y-puntos-abiertos.md) como **D-97 a D-121** y puntos abiertos **A-34 a A-44**.
 >
 > **Estado:** diseño aprobado, sin implementar. Reemplaza la exclusión genérica de nómina en [05 §5](05-alcance-mvp-y-flujos.md).
 
@@ -104,7 +104,15 @@ Esto no es una preferencia estética: es la razón de existir del módulo. En un
 
 ## 3. Periodicidad quincenal y mensual — un solo algoritmo
 
-El negocio elige la periodicidad en configuración y puede cambiarla (con efecto desde el siguiente mes, nunca a mitad de mes).
+El negocio elige la periodicidad en el wizard de arranque (§7.4) y puede cambiarla, con efecto desde el siguiente mes y nunca a mitad de mes. Las opciones son **semanal, quincenal y mensual** (D-110).
+
+**Los días de corte los define el negocio (D-111):** una quincena puede ser 5 y 20, no necesariamente 1–15 y 16–fin. Es como opera el negocio real y no hay razón para imponerle nuestro calendario.
+
+**Eso generaliza el cruce de mes.** Con cortes en 5 y 20, la quincena que va del 20 al 4 cruza el fin de mes igual que lo hace una semana. Cruzar meses deja de ser un caso raro de la periodicidad semanal y pasa a ser la norma: `month_anchor` (§3.2) tiene que ser una **regla general** —a qué mes pertenece un corte que cruza— y no un parche.
+
+**Y cambia lo que la pantalla debe dibujar:** un mes deja de contener exactamente dos cortes. Con cortes en 5 y 20 se ven **tres tramos** — la cola del anterior, uno completo y el arranque del siguiente. El calendario y la franja de cortes renderizan *los tramos que tocan el mes*, no "los dos cortes del mes".
+
+**El pago diario cabe dentro de este mismo concepto (A-43)**, sin invertir nada. Mientras exista una plantilla estable de gente que se espera que venga —el taller con "los muchachos"—, el default sigue siendo "vino" y lo que se registra sigue siendo la ausencia: cambia la **frecuencia de liquidación**, no la forma de capturar. Con liquidación diaria no se dibujan treinta barras verticales: la barra solo tiene sentido cuando el corte abarca varios días, y el estado de pago de cada día ya lo comunican los **tres tonos de la línea**. La frontera a vigilar no es el pago diario sino el **trabajo ocasional**, donde la ausencia deja de ser excepción y el modelo se invierte solo.
 
 ### 3.1 El problema
 
@@ -127,6 +135,8 @@ valor_a_pagar(período_n) = liquidación_mensual_acumulada(hasta período_n)
 ```
 
 Cada `PayrollPeriod` lleva un `month_anchor` (el mes calendario al que pertenece). El motor calcula el mes completo con todas las reglas legales aplicadas correctamente, y luego descuenta lo ya pagado.
+
+**Regla de `month_anchor` para cortes que cruzan (D-111):** un corte pertenece al mes que contiene su **fecha de fin**, que es el mes en que se liquida y se paga. Con cortes en 5 y 20, el tramo del 20 de agosto al 4 de septiembre ancla en **septiembre**. Es la regla más simple que no requiere partir el corte, y coincide con el momento en que el dinero sale. Cuando llegue el motor legal habrá que revisarla contra el IBC, que es estrictamente mensual: puede exigir prorratear el corte entre los dos meses en vez de asignarlo entero. **Mientras el módulo esté en modo simple (§4.5) la regla basta.**
 
 Por qué esto es lo correcto y no solo lo elegante:
 
@@ -180,7 +190,7 @@ Beneficio adicional: el negocio puede crear "Bonificación de ventas" o "Descuen
 | **Empleado** | Tipo de vinculación (§4.3) · salario · fecha de ingreso · EPS/AFP · clase de riesgo ARL *si difiere del default* · tipo de contrato laboral | Al contratar y en cambios puntuales |
 | **Período** | Novedades | Cada corrida |
 
-**Periodicidad de pago: global, sin override en v1 (D-103).** Dos periodicidades conviviendo significan dos corridas por mes, dos reconciliaciones y una PILA que hay que cuadrar a mano — y no existe el negocio pequeño que le pague a Juan quincenal y a María mensual. No es una puerta cerrada: como D-100 liquida sobre el **mes acumulado**, si algún día hace falta basta con anclar el período por empleado; el motor ya lo soporta estructuralmente.
+**Periodicidad de pago: global, sin override en v1 (D-103, ampliada a semanal por D-110).** Dos periodicidades conviviendo significan dos corridas por mes, dos reconciliaciones y una PILA que hay que cuadrar a mano — y no existe el negocio pequeño que le pague a Juan quincenal y a María mensual. No es una puerta cerrada: como D-100 liquida sobre el **mes acumulado**, si algún día hace falta basta con anclar el período por empleado; el motor ya lo soporta estructuralmente.
 
 **Clase de riesgo ARL: default global + override por empleado.** Legalmente depende del oficio de cada persona, pero en una ferretería casi todos son la misma clase. Caso de libro del patrón.
 
@@ -209,6 +219,73 @@ Hay dos cosas distintas que la conversación corriente mezcla bajo "tipo de cont
 
 El camino del contratista es **más barato de implementar, no más caro**: `honorarios − retefuente − otros descuentos = neto`, sin prestaciones, sin aportes patronales, sin auxilio de transporte y sin novedades de ausencia. En la tabla de liquidación su fila muestra menos columnas: no se le enseña "auxilio de transporte: $0".
 
+
+---
+
+### 4.4 Modelo de novedades — dos tablas (D-112)
+
+**No inventamos la taxonomía: ya existe.** El **anexo técnico de nómina electrónica de la DIAN** (v3.0, Resolución 000040 de 2024) define la estructura de *devengados* y *deducidos* y enumera los tipos de novedad. Es el vocabulario que el país entero usa, y adoptarlo cumple D-102 sin esfuerzo extra — modelamos según el anexo no para transmitir nosotros, sino para que el contador pueda.
+
+**Pero el vocabulario no es el esquema.** El anexo tiene ~40 conceptos entre devengados y deducciones; eso no son 40 tablas ni 40 columnas. Es un catálogo.
+
+**`novelty_type`** — el catálogo. Datos semilla, ampliables por el negocio desde Configuraciones.
+
+| Campo | Para qué |
+|---|---|
+| `code` | `INCAPACIDAD_EPS`, `HORA_EXTRA_DIURNA`, `VACACIONES` |
+| `label` | Lo que ve el usuario. **Lo elige el negocio** cuando crea conceptos propios — ver la nota de nombres abajo |
+| `unit` | `dias` · `horas` · `monto` |
+| `effect` | `devengado` · `deduccion` · `ninguno` |
+| `consumes_day` | **Decide si sale como avatar en el calendario** (§7) |
+| `is_salarial` | ¿Entra a base prestacional? (§4.1) |
+| `affects_ibc` | ¿Entra a base de seguridad social? (§4.1) |
+| `dian_code` | El mapeo al anexo técnico |
+
+Las tres banderas del medio son las de §4.1; `dian_code` es lo único que agrega esta sección.
+
+**`novelty`** — los hechos. Una sola tabla para todo:
+
+```
+id · employee_id · type_code · start_date · end_date · quantity · note
+```
+
+`quantity` no necesita declarar de qué es: el `type_code` ya trae la unidad desde el catálogo.
+
+#### Lo que deliberadamente NO lleva
+
+| Ausencia | Por qué |
+|---|---|
+| Campo `status` | Se deriva: futuro = programado, pasado = ocurrido. Cancelar = borrar. La inmutabilidad la impone el corte cerrado (§8), no la novedad |
+| Flujo de aprobación | En una tienda el dueño **es** quien aprueba; registrar ya es aprobar. Pendiente/aprobado es ceremonia de empresa grande |
+| Una tabla por tipo | Vacaciones, incapacidades y horas extra son la misma forma: alguien, un rango, una cantidad |
+| Entidad "vacaciones programadas" | Es una `novelty` con fechas futuras. Nada más |
+| Entidad "trabajadores del día" | Es una **consulta**: activos menos los que tienen novedad con `consumes_day` esa fecha. Guardarlo sería duplicar la verdad y abrir la puerta a que se contradiga |
+
+Los dos últimos son el punto: **ni la programación ni la presencia agregan nada al modelo.** Son lo mismo que ya hace la línea de continuidad del calendario — derivar en vez de almacenar.
+
+#### Set inicial: 13 tipos
+
+**Consumen día** (avatar en el calendario): incapacidad EPS · incapacidad ARL · licencia de maternidad/paternidad · licencia remunerada · licencia no remunerada · vacaciones · ausencia injustificada · permiso por horas
+
+**No consumen día** (marcador discreto): hora extra diurna · hora extra nocturna · recargo nocturno · bonificación · descuento o préstamo
+
+Los dos últimos **no se capturan desde el calendario** sino al liquidar (D-121): una bonificación o un descuento no le pasan a nadie *un día* — son ajustes de un pago, y anclarlos a una fecha era arbitrario. Siguen siendo conceptos del catálogo; lo que cambia es dónde se registran.
+
+#### Nota sobre los nombres de los conceptos
+
+El registro que genera este módulo **es evidencia**. Un histórico que muestre "el dueño le pagó la salud a Juan durante ocho meses" es el tipo de documento que sostiene un **contrato realidad** en un pleito laboral, con prestaciones retroactivas.
+
+No es razón para no construirlo — sí lo es para que **el negocio elija el nombre de sus conceptos** en vez de imponérselo nosotros. No es lo mismo *"Aporte a salud del empleado"* que *"Auxilio para seguridad social"*: el primero nombra una relación laboral, el segundo una ayuda. Es exactamente lo que permite el catálogo configurable, y es una razón de peso para que lo sea.
+
+### 4.5 Modo simple vs. modo legal (D-113)
+
+`PayrollSettings.calc_mode`: **`simple` | `legal`**, por negocio.
+
+En **modo simple** no hay IBC, ni prestaciones, ni aportes patronales, ni topes: cada línea de concepto lleva un **valor que el usuario teclea**. Es lo que necesita un taller que hoy paga en efectivo y quiere empezar a dejar registro.
+
+**El motor legal no reemplaza la captura manual: es una capa de autorelleno encima.** Misma tabla, mismo campo `quantity`, misma pantalla — lo único que cambia es quién llena el número. En modo legal el motor lo **propone** y el usuario puede pisarlo, que es la regla de override ya declarada innegociable en §6.
+
+Por eso construir el modo simple primero **no es trabajo botado**: es el cimiento, y lo legal se le monta encima sin migrar nada. Cambiar de modo no toca los períodos ya cerrados.
 
 ---
 
@@ -337,7 +414,7 @@ El módulo no sirve hasta que exista configuración, y una pestaña de ajustes e
 
 | Paso | Qué pregunta |
 |---|---|
-| 1. **Cómo pagas** | Periodicidad (quincenal / mensual) y día de pago |
+| 1. **Cómo pagas** | Periodicidad (semanal / quincenal / mensual) y **los días de corte** (ej. 5 y 20) |
 | 2. **Tu empresa frente a la ley** | ¿Contribuyente de renta? (exoneración art. 114-1, A-36) · caja de compensación · clase de riesgo ARL predominante |
 | 3. **Tu gente** | Alta rápida de empleados, o seguir con la lista vacía |
 
@@ -510,7 +587,82 @@ Todo lo de la columna derecha de D-108: artefactos cuya especificación la defin
 
 ---
 
-## 12. Registro de decisiones
+## 12. Contrato con el backend
+
+> Escrito desde el prototipo de calendario ya construido (`frontend/src/pages/payroll/`), que corre con estado local y datos de maqueta. Esta sección dice **qué tiene que entregar el backend** para reemplazarlo sin tocar las pantallas.
+
+### 12.1 Lo que se almacena y lo que se deriva
+
+Es la distinción que más fácil se pierde al conectar, y la que más caro cuesta equivocar: **si se almacena algo que debía derivarse, aparecen dos versiones de la verdad que tarde o temprano se contradicen.**
+
+| Se **almacena** | Se **deriva**, nunca se guarda |
+|---|---|
+| Empleado y sus condiciones | Días trabajados |
+| Novedades (rango, tipo, cantidad) | Horas de jornada por persona-día |
+| Marcadores (horas extra) | Si el día fue laborable |
+| Días que el negocio cerró | Si el día está liquidado |
+| Anotaciones libres del día | Costo del día |
+| Configuración de pago | Qué tramos de corte tocan un mes |
+| Pagos y su cobertura (D-114) | El estado de un corte |
+
+La regla que lo gobierna es **D-99**: nunca se registra presencia, solo la excepción. Todo lo de la columna derecha sale de aplicar esa resta.
+
+### 12.2 Campos que el prototipo ya espera
+
+Sobre el modelo de §4.4, esto es lo que el frontend consume hoy:
+
+**Empleado**
+
+| Campo | Para qué |
+|---|---|
+| `dailyCost` | Costo del día y total del período |
+| `vacationBalance` | Saldo al conceder vacaciones (D-119) |
+| `workerType` | `employee` \| `contractor` — el contratista no aparece en la grilla de días |
+
+**Novedad**
+
+| Campo | Nota |
+|---|---|
+| `start` / `end` | Rango; iguales cuando es de un día |
+| `span` | `full_day` \| `half_day` \| `hours` |
+| `hours` | **Obligatorio con `span: "hours"`** (D-118) |
+| `attachmentName` | Soporte de incapacidad o permiso — el backend recibirá el archivo |
+
+**Marcador** — solo horas extra (D-121); `quantity` son las horas, estructuradas y no solo dentro del texto del label. Bonificaciones y descuentos llegan por la liquidación, no por acá.
+
+**Configuración** — `periodicity`, `cutDays`, `weekStartsOn`, `hoursPerDay`, `calcMode`.
+
+### 12.3 Las tres costuras
+
+Puntos donde el prototipo tiene hoy una implementación provisional y el backend entra a reemplazarla. Están marcados en el código.
+
+| Costura | Hoy | Con backend |
+|---|---|---|
+| **`isSettledFor(employeeId, day)`** en `usePayrollCalendar.ts` | Devuelve si el corte cerró — igual para todos, así que el todo-o-nada de D-117 aún no distingue | Mira la **cobertura del pago** por persona (D-114). Es lo único que cambia para que la línea diga la verdad |
+| **Festivos** en `payroll.mock.ts` | Lista fija de 2026 escrita a mano | Paquete de festivos colombianos o tabla propia — la Ley Emiliani mueve doce festivos al lunes y varios dependen de la Pascua |
+| **Estado local** en `PayrollView.vue` | `ref`s sembrados del mock, solo el mes actual | Store de Pinia contra la API. **El shape ya coincide**: se sustituye la fuente, no las pantallas |
+
+### 12.4 Lo que el prototipo muestra y todavía no es verdad
+
+Honestidad sobre lo que se ve en pantalla, para que nadie lo tome por funcionalidad terminada:
+
+- **El costo excluye a todo el que tenga novedad**, y eso legalmente es falso: las vacaciones se pagan, la incapacidad al 66,67% desde el tercer día, un permiso remunerado se paga. Es el motor legal, que por D-113 no existe — la UI lo rotula *"Referencial — sin reglas de ley todavía"*.
+- **El conteo de días de vacaciones es de calendario, no de hábiles** (D-119).
+- **El adjunto solo guarda el nombre del archivo**: no hay backend que lo reciba.
+- **El saldo de vacaciones está sembrado**; el real sale de `EmployeeAccrual` (§5.4), que alimenta el cierre de período.
+- **Solo el mes actual tiene datos.** Los demás quedan vacíos a propósito, para poder ver el estado vacío — que es el 90% de los casos reales.
+
+### 12.5 Una trampa de implementación que se va a repetir
+
+Encadenar diálogos de Reka (Radix) **cerrando uno y abriendo otro en el mismo tick** deja `pointer-events: none` pegado en el `body`: el modal que queda se ve pero no recibe clics.
+
+**La solución que quedó (D-120): un solo diálogo montado a la vez.** Los diálogos van con `v-if` sobre un único estado; abrir uno desde otro es asignar el nombre y Vue desmonta el anterior antes de montar el nuevo. Nada de alternar props `open` con un retardo calculado a ojo —esa fue la primera corrección y dejaba 20 ms con dos diálogos vivos— y nada de "volver" al modal de abajo al cerrar: cerrar cierra, y quien quiera el anterior lo abre otra vez.
+
+Aplica a cualquier pantalla del proyecto que encadene modales, no solo a Nómina. Regla corta: **si dos diálogos pueden estar montados al mismo tiempo, algo va a salir mal tarde o temprano.**
+
+---
+
+## 13. Registro de decisiones
 
 Detalle completo en [07 — Decisiones y puntos abiertos](07-decisiones-y-puntos-abiertos.md).
 
@@ -529,6 +681,18 @@ Detalle completo en [07 — Decisiones y puntos abiertos](07-decisiones-y-puntos
 | D-107 | **Techo de alcance permanente en el nivel 2** (preparar el pago). El nivel 3 —mover dinero, tesorería, conciliación— queda **descartado, no aplazado** |
 | D-108 | **Refina D-107: el eje no es la cercanía al dinero sino el destinatario del artefacto.** Entran los **documentos para personas**; quedan fuera los **archivos máquina a máquina** (plano bancario, PILA, transmisión DIAN), cuya especificación define un tercero |
 | D-109 | **Los documentos son el producto, el cálculo es el motor.** El generador de plantillas (§10) pasa de anexo a pieza central del módulo |
+| D-110 | Amplía D-103: periodicidad **semanal / quincenal / mensual**, fijada en el wizard de arranque |
+| D-111 | **Los días de corte los define el negocio** (ej. 5 y 20). Cruzar el fin de mes pasa a ser la norma, y un mes puede mostrar **tres tramos** de corte, no dos |
+| D-112 | **Modelo de novedades en dos tablas** (`novelty_type` + `novelty`), con el vocabulario del anexo técnico DIAN. Sin `status`, sin aprobación, sin tabla por tipo: programación y presencia se **derivan** |
+| D-113 | **`calc_mode: simple \| legal` por negocio.** El motor legal es una **capa de autorelleno** sobre la captura manual, no un reemplazo — mismo campo, mismo esquema |
+| D-114 | **La unidad de liquidación es el pago, no el corte.** Se puede liquidar un rango arbitrario en cualquier momento; el corte queda como rango por defecto, ritmo del aviso y agrupación de reporte |
+| D-115 | **El "..." actúa, la celda lee.** Detalle del día como modal; el avatar abre esa novedad. La grilla muestra excepciones, el detalle muestra a todo el equipo |
+| D-116 | **Un solo modal para crear, editar y quitar.** Se autocompleta con lo registrado; "Laboró normal" o cantidad en 0 **quitan** la novedad |
+| D-117 | **La línea describe el pago, no el corte**: primario = liquidado (todo o nada), gris medio = laborado, gris claro = por venir. **Con una persona enfocada, su novedad manda** y la línea toma el color del tipo |
+| D-118 | **Horas de buena fe**: se asume jornada completa y solo las novedades la reducen. `hoursPerDay` configurable, nunca 8 fijo |
+| D-119 | **Campos por contexto**: rango con mínimo en el día de entrada, adjunto en incapacidad y permiso, saldo de vacaciones con advertencia |
+| D-120 | **Un solo diálogo montado a la vez** (`v-if`), sin retardo ni memoria del modal de abajo — cerrar cierra, y el anterior se abre otra vez si hace falta |
+| D-121 | **Bonificación y descuento salen del calendario.** No son hechos de un día sino ajustes de un pago: se capturan al liquidar. En el día solo quedan las horas extra como marcador |
 
 | ID | Punto abierto |
 |---|---|
@@ -540,3 +704,6 @@ Detalle completo en [07 — Decisiones y puntos abiertos](07-decisiones-y-puntos
 | ✅ A-39 | ¿Entra la **prestación de servicios** a v1? -> **RESUELTO** (D-105): sí, y va primero |
 | A-40 | **Validación jurídica de las plantillas de contrato** — ¿quién las revisa y avala? Bloqueante para publicar §10 |
 | A-41 | ¿Se implementa el **checklist de idoneidad** antes de generar un contrato de prestación de servicios? (protección real vs. fricción en un flujo que queremos rápido) |
+| A-42 | Caso frontera de D-108: ¿el **certificado de ingresos y retenciones** (formulario 220) entra como documento para personas, o queda fuera por ser formato oficial de un tercero? |
+| A-43 | **Pago diario** — cabe en el concepto actual mientras la plantilla sea estable. La frontera real es el **trabajo ocasional**, donde la ausencia deja de ser excepción |
+| A-44 | **Solape de pagos: ¿se bloquea o se advierte?** Bloquea la implementación de D-114. Recomendación: **bloquear** — pagar dos veces el mismo día no tiene lectura legítima |

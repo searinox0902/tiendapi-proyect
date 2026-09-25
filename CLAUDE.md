@@ -6,7 +6,9 @@ Guía para agentes de IA que trabajan en este repositorio.
 
 Software de gestión comercial (referencias, inventario y facturación) para pymes locales de Medellín. Arquitectura **desktop-first / local-first**: la BBDD local (SQLite) es la fuente de verdad y la operación funciona sin internet; la nube es una capa delgada de apoyo (auth, cobro, actualizaciones, sync).
 
-**Estado:** pre-MVP. Ya hay código: backend central (FastAPI/SQLAlchemy/Alembic) y frontend del MVP (Vue 3), más cimientos de infra/empaquetado (Docker, CI, Tauri). Falta la integración real (auth, wiring, integridad financiera, sync) — ver fases F1–F4 en [docs/10](docs/10-infraestructura-dev-y-empaquetado.md).
+**Estado:** pre-MVP. Ya hay código: backend central (FastAPI/SQLAlchemy/Alembic) y frontend del MVP (Vue 3), más cimientos de infra (Docker, CI). Falta la integración real (wiring, integridad financiera, sync) y el empaquetado Tauri — ver fases F1–F4 en [docs/10](docs/10-infraestructura-dev-y-empaquetado.md).
+
+**Para poner el proyecto a correr** (y para saber qué está construido de verdad y qué solo está documentado): [ARRANQUE.md](ARRANQUE.md).
 
 ## Antes de trabajar: carga el contexto que necesites
 
@@ -32,8 +34,8 @@ Los PDFs y notas fuente originales están en `specs/` (incluye `specs/Addendum_2
 ## Código existente
 
 - **[`backend/`](backend/)** — andamiaje del backend central (FastAPI + SQLAlchemy + Alembic + PostgreSQL). Modelos, migración inicial y CRUD skeleton para las 8 entidades de negocio, con extensión multi-tenant (`Tenant` + `tenant_id`, ver [docs/03-modelo-datos.md](docs/03-modelo-datos.md), §9, y decisiones D-23 a D-25 en [docs/07](docs/07-decisiones-y-puntos-abiertos.md)). La resolución de `tenant_id` en `backend/app/api/deps.py` es un **stub temporal** (header `X-Tenant-ID`) — no hay autenticación real todavía (punto abierto A-12).
-- **[`frontend/`](frontend/)** — app del MVP (Vue 3 + TS + Tailwind + Pinia sobre Vite). Las 3 pantallas: login mock, Registrar Referencia, Registrar Pago (con autocompletado por SKU y cálculos con Decimal.js). Es **autocontenido**: Pinia es la fuente de verdad, no requiere el backend para correr (D-27). UI con variables CSS estilo shadcn/vue (D-28). Ahora tiene scaffolding de **Tauri** en `frontend/src-tauri/` para empaquetarlo como instalable (D-29 revierte D-26); el código Vue no se toca.
-- **Infra de desarrollo y empaquetado** — el backend se levanta como servicio con Docker Compose (Postgres + API), hay CI en GitHub Actions (lint + migraciones + tests) y el instalador Tauri empaqueta **solo el frontend autocontenido**; el backend corre por separado, **no** embebido en el `.exe` (D-29 a D-31). Guía completa: [docs/10-infraestructura-dev-y-empaquetado.md](docs/10-infraestructura-dev-y-empaquetado.md).
+- **[`frontend/`](frontend/)** — app del MVP (Vue 3 + TS + Tailwind + Pinia sobre Vite). Las 3 pantallas: login mock, Registrar Referencia, Registrar Pago (con autocompletado por SKU y cálculos con Decimal.js). Es **autocontenido**: Pinia es la fuente de verdad, no requiere el backend para correr (D-27). UI con variables CSS estilo shadcn/vue (D-28). El empaquetado como instalable con **Tauri** está decidido (D-29 revierte D-26) pero **no construido**: no existe `frontend/src-tauri/`; cuando se haga, el código Vue no se toca.
+- **Infra de desarrollo y empaquetado** — el backend se levanta como servicio con Docker Compose (Postgres + API) y hay CI en GitHub Actions (lint + migraciones + tests). El instalador Tauri **está pendiente**; cuando exista empaquetará **solo el frontend autocontenido**, con el backend corriendo por separado y **no** embebido en el `.exe` (D-29 a D-31). Guía completa: [docs/10-infraestructura-dev-y-empaquetado.md](docs/10-infraestructura-dev-y-empaquetado.md).
 - **Cómo correr todo:** ver [README.md](README.md).
 - Aún **falta** (fases F1–F4): autenticación real (A-12), wiring frontend↔backend, validación financiera en servidor, firma HMAC/cadena de hash de facturas ([docs/04-seguridad.md](docs/04-seguridad.md)), motor de sync, licencia e infra cloud productiva. Toolchain para builds locales: **Rust** (instalador) y **Docker** (backend).
 
@@ -41,7 +43,7 @@ Los PDFs y notas fuente originales están en `specs/` (incluye `specs/Addendum_2
 
 ✅ **Frontend:** Vue 3 + TypeScript + Shadcn/Vue + Tailwind CSS + Pinia.
 ✅ **Backend:** Python (FastAPI o Django REST, por confirmar framework específico).
-✅ **Empaquetado:** Tauri.
+✅ **Empaquetado:** Tauri (decidido; andamiaje aún sin construir).
 ✅ **BBDD local:** SQLite + SQLCipher.
 
 Ver [docs/STACK_TECH.md](docs/STACK_TECH.md) para referencia rápida o [docs/02-arquitectura.md](docs/02-arquitectura.md) para contexto completo.

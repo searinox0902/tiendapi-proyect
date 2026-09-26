@@ -17,13 +17,19 @@ tiendapi-proyect/
 └── frontend/     App MVP — Vue 3 + TypeScript + Tailwind + Pinia (Vite; Tauri más adelante)
 ```
 
-## Primera iteración del MVP (3 pantallas)
+## Qué hay construido
 
-1. **Inicio de sesión** — sesión mock (cualquier usuario/clave; sin backend de auth).
-2. **Registrar Referencia** — alta manual de producto.
-3. **Registrar Pago** — se ingresa un SKU; si la referencia existe se **autocompleta** y los totales se calculan con Decimal.js.
+**Frontend** (Vue 3 + TS + Tailwind + shadcn/vue + Pinia): inicio de sesión, dashboard,
+catálogo de Referencias (listado/alta/edición), Productos (unidades físicas), Caja (POS),
+Facturación (listado + documento imprimible + exportación), Directorio, Configuraciones y
+una maqueta del módulo de **Nómina** (`/nomina`, sin backend todavía).
 
-En esta iteración el **frontend es autocontenido** (Pinia como fuente de verdad): no necesita el backend para funcionar.
+**Backend** (FastAPI + SQLAlchemy + Alembic + Postgres): multi-tenant, migraciones, CI, y
+**autenticación real con JWT** — el `tenant_id` sale del token, no de un header.
+
+Alcance y decisiones: [docs/05 — Alcance del MVP y flujos](docs/05-alcance-mvp-y-flujos.md)
+y el registro `D-XX`/`A-XX` en [docs/07](docs/07-decisiones-y-puntos-abiertos.md).
+Los cálculos de dinero usan **aritmética decimal exacta** (Decimal.js en cliente).
 
 ---
 

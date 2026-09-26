@@ -31,13 +31,13 @@
 |------------|-----------------|-------|
 | Fondo de app / layout | Blanco o `gray-50` | Base ~90% |
 | Tarjetas / paneles | Blanco con borde `gray-100`/`gray-200` | Sutil, sin sombras pesadas |
-| Botón primario (ej. "Guardar Referencia", "Registrar Pago") | Púrpura (`purple-600` / `violet-600` como punto de partida) | Único color saturado visible en la pantalla |
+| Botón primario (ej. "Guardar Referencia", "Cobrar") | Púrpura (`purple-600` / `violet-600` como punto de partida) | Único color saturado visible en la pantalla |
 | Botón secundario | Fondo claro + borde, texto negro | Evita competir con el primario |
 | Texto principal (labels, valores) | Negro / `gray-900` | ~3% de la superficie total |
 | Íconos activos, enlaces, estado seleccionado en listas | Púrpura | Refuerza jerarquía visual |
 | Inputs — estado normal | Fondo claro, borde `gray-200`, texto negro | — |
 | Inputs — estado foco | Borde/anillo púrpura | Señala interactividad, coherente con Shadcn/Vue `focus-visible ring` |
-| Autocompletado de Referencia (Pantalla "Registrar Pago") | Resultado sugerido resaltado en púrpura claro (`purple-50`/`purple-100`) al hacer hover/selección | Ver flujo en [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md) |
+| Autocompletado de Referencia (Caja y alta de factura) | Resultado sugerido resaltado en púrpura claro (`purple-50`/`purple-100`) al hacer hover/selección | Ver flujo en [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md) |
 
 ## 4. Tipografía y forma
 
@@ -89,13 +89,7 @@ Tres cosas que el script resuelve y que a mano se rompen:
 
 ## 6. Dónde se usa este sistema de color
 
-Aplica a las tres pantallas de la primera iteración del MVP (ver [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md), §2):
-
-1. Inicio de sesión (mock).
-2. Registrar Referencia.
-3. Registrar Pago (con autocompletado de Referencia).
-
-Y se extiende como estándar visual para el resto de pantallas futuras del producto.
+Aplica a **todas** las pantallas del producto, sin excepción — ver el alcance en [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md), §2. No hay pantalla que se salga del sistema de color: los tokens viven en `frontend/src/style.css` y **no se pintan colores a mano en los componentes**.
 
 ## 6.1 Componentes UI disponibles (base instalada)
 
@@ -144,7 +138,7 @@ Se emite la **entidad entera**, no solo el texto, para que quien lo use decida �
 
 ## 7. Pantalla Dashboard (métricas generales) — diseño y definiciones
 
-> **Estado: dentro del alcance del MVP (D-51).** Forma parte de las 5 pantallas del MVP ([05](05-alcance-mvp-y-flujos.md), §2.1) — corrige la nota anterior que la marcaba como "post-MVP" cuando solo existía la primera iteración de 3 pantallas (D-14).
+> **Estado: dentro del alcance del MVP (D-51).** Forma parte de las 5 pantallas del MVP ([05](05-alcance-mvp-y-flujos.md), §2) — corrige la nota anterior que la marcaba como "post-MVP".
 >
 > ⚠️ **Esta sección fue reescrita por D-66 y D-67, y su selector por D-69.** El Dashboard **ya no es** el roll-up financiero encabezado por Margen % que definía D-49: es un tablero **operativo de producto** (decisión del dueño de producto, D-66). El catálogo de fórmulas de D-49 sigue vigente para las **otras** pantallas, con la corrección de Utilidad de D-67. El selector de período (Hoy · Semana · Mes) que describía la §7.3 original fue reemplazado por un **rango de fechas libre** (D-69) — ver esa sección para el layout vigente.
 

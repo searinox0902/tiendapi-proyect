@@ -26,7 +26,7 @@
 
 ## 3. Próximos pasos (roadmap inmediato)
 
-1. Montar **prototipos en Figma** de la primera iteración del MVP: Inicio de sesión (mock), Registrar Referencia, Registrar Pago con autocompletado → ver [05](05-alcance-mvp-y-flujos.md), §2, y sistema de color en [09](09-diseno-ui-ux.md).
+1. ~~Montar **prototipos en Figma** de la primera iteración del MVP.~~ **Hecho y superado:** las pantallas se construyeron directamente en Vue; el alcance vigente es el de D-51 → ver [05](05-alcance-mvp-y-flujos.md), §2, y sistema de color en [09](09-diseno-ui-ux.md).
 2. Definir el **esquema de datos definitivo** junto al arquitecto → ver [03](03-modelo-datos.md).
 3. Obtener **2–3 XML reales** de proveedores locales para validar el parseo.
 4. **Cerrar la decisión de stack de backend.** ⚠️ Ver contradicción en [07](07-decisiones-y-puntos-abiertos.md) *(el informe la enuncia como "Node.js vs. Java" pero §8.3 ya declara Python)*.

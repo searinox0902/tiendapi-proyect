@@ -42,7 +42,7 @@ Esta documentación reorganiza los dos informes originales en documentos temáti
 
 Para detalles, ver [STACK_TECH.md](STACK_TECH.md) o [02 — Arquitectura](02-arquitectura.md).
 
-✅ **Primera iteración del MVP (3 pantallas):** Inicio de sesión (mock, sin backend) → Registrar Referencia → Registrar Pago (con autocompletado de Referencia). Ver [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md), §2.
+✅ **Alcance de pantallas del MVP (D-51):** Inicio de sesión, CRUD Referencia, CRUD Productos, Facturas y Dashboard — más Directorio (D-71), Configuraciones acotada (D-77) y Caja/POS. Ver [05 — Alcance MVP y flujos](05-alcance-mvp-y-flujos.md), §2. *(Reemplaza la "primera iteración de 3 pantallas" de D-14, ya superada.)*
 
 ✅ **Sistema de color:** 90% fondos claros / 7% púrpura primario / 3% negro (texto/acento). Ver [09 — Diseño de interfaz](09-diseno-ui-ux.md).
 
@@ -50,6 +50,6 @@ Para detalles, ver [STACK_TECH.md](STACK_TECH.md) o [02 — Arquitectura](02-arq
 
 ✅ **Andamiaje del backend construido:** FastAPI + SQLAlchemy + Alembic + PostgreSQL (docker-compose), con modelos, migración inicial verificada y CRUD skeleton para las 8 entidades del negocio, más extensión multi-tenant (`Tenant` + `tenant_id`). Código en [`backend/`](../backend/); decisiones nuevas D-23 a D-25 en [07 — Decisiones](07-decisiones-y-puntos-abiertos.md); detalle del esquema implementado en [03 — Modelo de datos](03-modelo-datos.md), §9.
 
-✅ **Frontend del MVP construido:** Vue 3 + TS + Tailwind + Pinia (Vite; Tauri pospuesto). Las 3 pantallas (login mock → Registrar Referencia → Registrar Pago con autocompletado y Decimal.js), verificadas en navegador. Autocontenido, no requiere backend. Código en [`frontend/`](../frontend/); decisiones D-26 a D-28 en [07 — Decisiones](07-decisiones-y-puntos-abiertos.md). Cómo correr todo: [`README.md`](../README.md).
+✅ **Frontend construido:** Vue 3 + TS + Tailwind + shadcn/vue + Pinia (Vite; Tauri pendiente). Login, dashboard, catálogo de Referencias, Productos, Caja (POS), Facturación, Directorio, Configuraciones y la maqueta de Nómina. Código en [`frontend/`](../frontend/); decisiones D-26 a D-28 en [07 — Decisiones](07-decisiones-y-puntos-abiertos.md). Cómo correr todo: [`ARRANQUE.md`](../ARRANQUE.md).
 
 ✅ **Cimientos de infraestructura y empaquetado (F0):** backend endurecido (CORS, config por entorno, logging, manejo global de errores, health con estado de BBDD), levantable como servicio con **Docker Compose** (Postgres + API), **CI** en GitHub Actions (lint + migraciones + tests) y **scaffolding de Tauri** para generar el instalador `.exe` (empaqueta solo el frontend autocontenido). Decisiones **D-29 a D-31**; guía completa en [10 — Infraestructura y empaquetado](10-infraestructura-dev-y-empaquetado.md). **Pendiente (fases F1–F4):** auth real (stub, A-12), wiring frontend↔backend, validación financiera y firma HMAC/cadena de hash, sync, licencia e infra cloud productiva.

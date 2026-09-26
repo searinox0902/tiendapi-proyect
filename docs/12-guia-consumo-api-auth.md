@@ -67,10 +67,10 @@ async function getMe(token: string) {
 
 ## 5. La costura con lo que ya existe
 
-Los stores de Pinia ya exponen la firma pensada como **costura** para el backend (D-27: `addReference`/`findBySku`, etc.). Conectar el login es reemplazar el "mock" de sesión por: llamar a `/auth/login`, guardar el token, y hacer que las llamadas de datos incluyan el header `Authorization`. El resto de pantallas no cambia de forma.
+Los stores de Pinia exponen la firma pensada como **costura** para el backend (D-27: `addReference`/`findBySku`, etc.). Conectar el login fue: llamar a `/auth/login`, guardar el token, y mandar el header `Authorization` en las llamadas de datos. El resto de pantallas no cambió de forma.
 
-## 6. Reemplazo de la sesión mock (D-15)
+## 6. Estado: hecho (D-15 y A-10 cerrados)
 
-Esta guía es lo que **cierra D-15** (login mock) del lado del frontend: el backend ya ofrece auth real (D-36). El momento y la forma de hacer el cambio en Vue quedan a criterio de quien integra (era el punto abierto A-10).
+**Ya no hay sesión mock.** El backend ofrece auth real (D-36) y el frontend la consume: `frontend/src/stores/auth.ts` llama a `POST /auth/login`, guarda el `access_token` en `localStorage` y lo manda como Bearer. Esto cerró D-15 y el punto abierto A-10. Lo que sigue abajo es la referencia del contrato, no trabajo pendiente.
 
 > **Prueba rápida sin frontend:** `http://localhost:8000/docs` → `POST /auth/login` con el usuario demo → copia el `access_token` → botón **Authorize** → ya puedes llamar los endpoints protegidos desde Swagger.

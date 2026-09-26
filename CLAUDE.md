@@ -34,7 +34,7 @@ Los PDFs y notas fuente originales están en `specs/` (incluye `specs/Addendum_2
 ## Código existente
 
 - **[`backend/`](backend/)** — andamiaje del backend central (FastAPI + SQLAlchemy + Alembic + PostgreSQL). Modelos, migración inicial y CRUD skeleton para las 8 entidades de negocio, con extensión multi-tenant (`Tenant` + `tenant_id`, ver [docs/03-modelo-datos.md](docs/03-modelo-datos.md), §9, y decisiones D-23 a D-25 en [docs/07](docs/07-decisiones-y-puntos-abiertos.md)). La resolución de `tenant_id` en `backend/app/api/deps.py` es un **stub temporal** (header `X-Tenant-ID`) — no hay autenticación real todavía (punto abierto A-12).
-- **[`frontend/`](frontend/)** — app del MVP (Vue 3 + TS + Tailwind + Pinia sobre Vite). Las 3 pantallas: login mock, Registrar Referencia, Registrar Pago (con autocompletado por SKU y cálculos con Decimal.js). Es **autocontenido**: Pinia es la fuente de verdad, no requiere el backend para correr (D-27). UI con variables CSS estilo shadcn/vue (D-28). El empaquetado como instalable con **Tauri** está decidido (D-29 revierte D-26) pero **no construido**: no existe `frontend/src-tauri/`; cuando se haga, el código Vue no se toca.
+- **[`frontend/`](frontend/)** — app del MVP (Vue 3 + TS + Tailwind + Pinia sobre Vite). Pantallas construidas: login, dashboard, catálogo de Referencias, Productos (unidades físicas), Caja (POS), Facturación, Directorio, Configuraciones y la maqueta de **Nómina** (`/nomina`, todavía sin backend). Cálculos de dinero con Decimal.js. UI con variables CSS estilo shadcn/vue (D-28). El empaquetado como instalable con **Tauri** está decidido (D-29 revierte D-26) pero **no construido**: no existe `frontend/src-tauri/`; cuando se haga, el código Vue no se toca.
 - **Infra de desarrollo y empaquetado** — el backend se levanta como servicio con Docker Compose (Postgres + API) y hay CI en GitHub Actions (lint + migraciones + tests). El instalador Tauri **está pendiente**; cuando exista empaquetará **solo el frontend autocontenido**, con el backend corriendo por separado y **no** embebido en el `.exe` (D-29 a D-31). Guía completa: [docs/10-infraestructura-dev-y-empaquetado.md](docs/10-infraestructura-dev-y-empaquetado.md).
 - **Cómo correr todo:** ver [README.md](README.md).
 - Aún **falta** (fases F1–F4): autenticación real (A-12), wiring frontend↔backend, validación financiera en servidor, firma HMAC/cadena de hash de facturas ([docs/04-seguridad.md](docs/04-seguridad.md)), motor de sync, licencia e infra cloud productiva. Toolchain para builds locales: **Rust** (instalador) y **Docker** (backend).
@@ -48,13 +48,11 @@ Los PDFs y notas fuente originales están en `specs/` (incluye `specs/Addendum_2
 
 Ver [docs/STACK_TECH.md](docs/STACK_TECH.md) para referencia rápida o [docs/02-arquitectura.md](docs/02-arquitectura.md) para contexto completo.
 
-## Primera iteración del MVP (pantallas)
+## Alcance de pantallas
 
-1. **Inicio de sesión** — sesión **mock/simulada**, sin conexión real a backend de auth en esta etapa.
-2. **Registrar Referencia** — alta manual de producto.
-3. **Registrar Pago** — el usuario ingresa/busca una Referencia; si existe, se **autocompleta**.
+Fijado por **D-51** en 5 pantallas —inicio de sesión, CRUD Referencia, CRUD Productos, Facturas y Dashboard—, más lo que decisiones posteriores fueron agregando (Directorio D-71, Configuraciones acotada D-77, Caja/POS, y Nómina como módulo post-MVP D-97). Detalle en [docs/05-alcance-mvp-y-flujos.md](docs/05-alcance-mvp-y-flujos.md), §2.
 
-Detalle completo en [docs/05-alcance-mvp-y-flujos.md](docs/05-alcance-mvp-y-flujos.md), §2. No confundir la sesión mock con el modelo de seguridad definitivo de [docs/04-seguridad.md](docs/04-seguridad.md).
+> La vieja "primera iteración de 3 pantallas con sesión mock" (D-14/D-15) **ya no aplica**: D-51 fijó el alcance real y D-36 puso autenticación real (JWT). Si encuentras esa narrativa en algún documento, está desactualizada.
 
 ## Sistema de color de la interfaz
 
